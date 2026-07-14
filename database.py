@@ -17,8 +17,19 @@ def get_database_name():
     return os.getenv("WASTE_DB_PATH", DATABASE_NAME)
 
 
+def _ensure_database_directory(db_name: str):
+    db_path = Path(db_name)
+    parent_dir = db_path.parent
+    if parent_dir and not parent_dir.exists():
+        try:
+            parent_dir.mkdir(parents=True, exist_ok=True)
+        except Exception as exc:
+            print(f"Failed to create database directory {parent_dir}: {exc}")
+
+
 def get_connection():
     db_name = get_database_name()
+    _ensure_database_directory(db_name)
     return sqlite3.connect(db_name, timeout=30, detect_types=sqlite3.PARSE_DECLTYPES)
 
 
