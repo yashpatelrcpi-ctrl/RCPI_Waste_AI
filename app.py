@@ -23,6 +23,17 @@ app = FastAPI(title="RCPI Waste AI")
 
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    logger.info("Incoming request: %s %s", request.method, request.url.path)
+    try:
+        response = await call_next(request)
+        logger.info("Response %s for %s %s", response.status_code, request.method, request.url.path)
+        return response
+    except Exception as exc:
+        logger.exception("Unhandled exception while processing %s %s", request.method, request.url.path)
+        raise
+
 if (BASE_DIR / "static").exists():
     app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
