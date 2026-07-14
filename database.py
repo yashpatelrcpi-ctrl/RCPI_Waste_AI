@@ -14,7 +14,10 @@ else:
 
 
 def get_database_name():
-    return os.getenv("WASTE_DB_PATH", DATABASE_NAME)
+    db_name = os.getenv("WASTE_DB_PATH", DATABASE_NAME)
+    if not db_name:
+        raise ValueError("WASTE_DB_PATH is not configured and no default database path is available")
+    return db_name
 
 
 def _ensure_database_directory(db_name: str):
@@ -25,6 +28,7 @@ def _ensure_database_directory(db_name: str):
             parent_dir.mkdir(parents=True, exist_ok=True)
         except Exception as exc:
             print(f"Failed to create database directory {parent_dir}: {exc}")
+            raise
 
 
 def get_connection():

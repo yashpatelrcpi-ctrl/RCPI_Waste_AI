@@ -7,5 +7,6 @@ tmp_test_app.py
 .env
 .env.*
 .vscode/
+.venv/
 *.log
 .DS_Store

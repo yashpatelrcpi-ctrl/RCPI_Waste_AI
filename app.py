@@ -1,16 +1,23 @@
+import logging
+import traceback
 from fastapi import FastAPI, Request, Form, UploadFile, File
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
 from starlette.exceptions import HTTPException as StarletteHTTPException
-from database import initialize_all_databases, get_connection
+import os
+import sys
+from database import initialize_all_databases, get_connection, get_database_name
 from waste_manager import get_collection_stats
 from ai_engine import get_ai_response
 from app_routes import router as advanced_router
 
 BASE_DIR = Path(__file__).resolve().parent
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(name)s %(message)s')
+logger = logging.getLogger("rcpi-waste-ai")
 
 app = FastAPI(title="RCPI Waste AI")
 
@@ -23,6 +30,7 @@ if (BASE_DIR / "static").exists():
 @app.exception_handler(StarletteHTTPException)
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     error_detail = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
+    logger.warning("HTTP exception on %s %s: %s", request.method, request.url.path, error_detail)
     return templates.TemplateResponse(
         request,
         "error.html",
@@ -37,6 +45,7 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    logger.warning("Validation error on %s %s: %s", request.method, request.url.path, exc.errors())
     return templates.TemplateResponse(
         request,
         "error.html",
@@ -52,6 +61,8 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 @app.exception_handler(Exception)
 async def generic_exception_handler(request: Request, exc: Exception):
+    logger.error("Unhandled exception on %s %s: %s", request.method, request.url.path, exc, exc_info=True)
+    tb = traceback.format_exc()
     return templates.TemplateResponse(
         request,
         "error.html",
@@ -59,7 +70,7 @@ async def generic_exception_handler(request: Request, exc: Exception):
             "request": request,
             "status_code": 500,
             "error": "An unexpected server error occurred.",
-            "details": str(exc),
+            "details": tb,
             "path": request.url.path
         },
         status_code=500
@@ -73,8 +84,8 @@ app.include_router(advanced_router)
 async def favicon():
     icon_path = BASE_DIR / 'static' / 'favicon.ico'
     if icon_path.exists():
-        return FileResponse(icon_path)
-    return RedirectResponse('https://fastapi.tiangolo.com/img/favicon.png')
+        return FileResponse(icon_path, media_type='image/x-icon')
+    return Response(status_code=204)
 
 
 @app.get('/health')
@@ -82,8 +93,20 @@ async def health():
     return {'status': 'ok'}
 
 
-# initialize database (uses central `database.py` schema)
-initialize_all_databases()
+@app.on_event("startup")
+async def startup_event():
+    db_path = get_database_name()
+    logger.info("Starting RCPI Waste AI app")
+    logger.info("Python executable: %s", sys.executable)
+    logger.info("Database path: %s", db_path)
+    logger.info("Current working dir: %s", os.getcwd())
+    logger.info("App base dir: %s", BASE_DIR)
+    try:
+        initialize_all_databases()
+        logger.info("Database initialization complete")
+    except Exception as exc:
+        logger.error("Database initialization failed: %s", exc, exc_info=True)
+        raise
 
 
 # ================= HOME / DASHBOARD =================
