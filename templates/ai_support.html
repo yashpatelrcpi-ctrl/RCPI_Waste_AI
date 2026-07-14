@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Support - RCPI Waste AI</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .navbar {
+            background-color: rgba(0, 0, 0, 0.8);
+            padding: 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        }
+        .navbar h1 {
+            color: #fff;
+            margin: 0;
+        }
+        .nav-links {
+            display: flex;
+            gap: 1.5rem;
+        }
+        .nav-links a {
+            color: #fff;
+            text-decoration: none;
+            padding: 0.5rem 1rem;
+            border-radius: 5px;
+            transition: background 0.3s;
+        }
+        .nav-links a:hover {
+            background-color: rgba(255, 255, 255, 0.2);
+        }
+        .container {
+            max-width: 900px;
+            margin: 2rem auto;
+            padding: 1rem;
+        }
+        h2 {
+            color: white;
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        .chat-container {
+            background: white;
+            border-radius: 10px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            margin-bottom: 2rem;
+        }
+        .chat-box {
+            height: 400px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            background-color: #f9f9f9;
+        }
+        .message {
+            margin-bottom: 1rem;
+            padding: 1rem;
+            border-radius: 8px;
+            max-width: 80%;
+        }
+        .message.user {
+            background-color: #667eea;
+            color: white;
+            margin-left: auto;
+            text-align: right;
+        }
+        .message.ai {
+            background-color: #e0e0e0;
+            color: #333;
+            margin-right: auto;
+        }
+        .input-group {
+            display: flex;
+            gap: 0.5rem;
+        }
+        textarea {
+            flex: 1;
+            padding: 0.8rem;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 1rem;
+            font-family: inherit;
+            resize: vertical;
+            min-height: 60px;
+        }
+        button {
+            background-color: #667eea;
+            color: white;
+            padding: 0.8rem 1.5rem;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: bold;
+            transition: background 0.3s;
+            align-self: flex-end;
+        }
+        button:hover {
+            background-color: #5568d3;
+        }
+        .faq {
+            background: white;
+            border-radius: 10px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+        .faq h3 {
+            color: #667eea;
+            margin-top: 0;
+        }
+        .faq-item {
+            margin-bottom: 1.5rem;
+            padding-bottom: 1.5rem;
+            border-bottom: 1px solid #eee;
+        }
+        .faq-item:last-child {
+            border-bottom: none;
+            padding-bottom: 0;
+            margin-bottom: 0;
+        }
+        .faq-question {
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 0.5rem;
+        }
+        .faq-answer {
+            color: #666;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <h1>🗑️ RCPI Waste AI</h1>
+        <div class="nav-links">
+            <a href="/">Dashboard</a>
+            <a href="/wards">Wards</a>
+            <a href="/vehicles">Vehicles</a>
+            <a href="/waste-collection">Waste Collection</a>
+            <a href="/complaints">Complaints</a>
+            <a href="/reports">Reports</a>
+            <a href="/ai-support">AI Support</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <h2>🤖 AI Support Assistant</h2>
+        
+        <div class="chat-container">
+            <h3>Chat with AI</h3>
+            <div class="chat-box" id="chatBox">
+                <div class="message ai">
+                    <strong>🤖 AI Assistant:</strong> Hello! I'm your AI Waste Management Assistant. I have comprehensive knowledge about:
+                    <ul style="margin: 10px 0; padding-left: 20px;">
+                        <li>🗑️ Waste categories & classification</li>
+                        <li>♻️ Recycling guidelines & best practices</li>
+                        <li>🌱 Composting & organic waste management</li>
+                        <li>📱 Electronic waste (e-waste) handling</li>
+                        <li>🏗️ Construction waste</li>
+                        <li>⚠️ Hazardous waste safety</li>
+                        <li>📉 Waste reduction strategies</li>
+                        <li>🌍 Environmental impact facts</li>
+                    </ul>
+                    Ask me anything about waste management!
+                </div>
+                {% if query %}
+                <div class="message user">
+                    <strong>You:</strong> {{ query }}
+                </div>
+                {% endif %}
+                {% if response %}
+                <div class="message ai" style="white-space: pre-wrap; font-family: 'Courier New', monospace; font-size: 0.9rem; line-height: 1.5;">
+                    {{ response }}
+                </div>
+                {% endif %}
+            </div>
+            
+            <form method="post" action="/ai-support" enctype="multipart/form-data">
+                <div class="input-group" style="flex-direction: column; align-items: stretch;">
+                    <textarea name="query" placeholder="Ask about waste, recycling, environmental impact, or any waste management topic..." required></textarea>
+                    <input type="file" name="image" accept="image/*" style="margin-top: 10px; padding: 10px; border: 1px solid #ddd; border-radius: 5px; background: #fff;" />
+                    <button type="submit" style="margin-top: 10px; align-self: flex-start;">Send 📤</button>
+                </div>
+            </form>
+        </div>
+
+        <div class="faq">
+            <h3>❓ Frequently Asked Questions</h3>
+            
+            <div class="faq-item">
+                <div class="faq-question">How do I file a complaint?</div>
+                <div class="faq-answer">Go to the Complaints page and fill out the form with your details. Our team will review your complaint and respond within 24 hours.</div>
+            </div>
+
+            <div class="faq-item">
+                <div class="faq-question">How can I track waste collection in my area?</div>
+                <div class="faq-answer">Visit the Waste Collection page to see all collections in your ward. You can also check the Dashboard for overall collection statistics.</div>
+            </div>
+
+            <div class="faq-item">
+                <div class="faq-question">Where are the waste collection vehicles?</div>
+                <div class="faq-answer">Check the Vehicles page to see all active waste collection vehicles, their assigned wards, and driver information.</div>
+            </div>
+
+            <div class="faq-item">
+                <div class="faq-question">How do I add a new ward?</div>
+                <div class="faq-answer">Go to the Wards page and click "Add New Ward". Fill in the ward details including name, area, email, and address.</div>
+            </div>
+
+            <div class="faq-item">
+                <div class="faq-question">How can I view waste collection reports?</div>
+                <div class="faq-answer">Visit the Reports page to see detailed analytics about complaints, waste collection by type, and other statistics with charts.</div>
+            </div>
+
+            <div class="faq-item">
+                <div class="faq-question">What are the different waste types?</div>
+                <div class="faq-answer">We categorize waste into: Organic, Recyclable, Mixed, Electronic, and Construction waste. Each type is handled differently.</div>
+            </div>
+
+            <div class="faq-item">
+                <div class="faq-question">How often is waste collected?</div>
+                <div class="faq-answer">Waste collection frequency depends on your ward. Check with your ward administrator or the Waste Collection page for your area's schedule.</div>
+            </div>
+
+            <div class="faq-item">
+                <div class="faq-question">Who should I contact for emergencies?</div>
+                <div class="faq-answer">For emergencies, file a complaint through the Complaints page marked as urgent, or contact your ward administrator directly using the contact information in the Wards page.</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Auto-scroll to bottom of chat
+        var chatBox = document.getElementById('chatBox');
+        chatBox.scrollTop = chatBox.scrollHeight;
+    </script>
+</body>
+</html>

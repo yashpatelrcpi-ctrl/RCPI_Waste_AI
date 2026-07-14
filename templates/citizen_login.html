@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Citizen Login - RCPI Waste AI</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .login-container {
+            background: white;
+            padding: 40px;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            width: 100%;
+            max-width: 400px;
+        }
+        
+        .logo-section {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .logo {
+            font-size: 48px;
+            margin-bottom: 10px;
+        }
+        
+        h1 {
+            font-size: 24px;
+            color: #667eea;
+            margin-bottom: 5px;
+        }
+        
+        .subtitle {
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 600;
+        }
+        
+        input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 5px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+        
+        input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .login-btn {
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .login-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+        
+        .error-message {
+            background-color: #fee;
+            color: #c33;
+            padding: 12px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            display: none;
+        }
+        
+        .error-message.show {
+            display: block;
+        }
+        
+        .demo-info {
+            background-color: #e8f4f8;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            font-size: 13px;
+            color: #0d5f6f;
+            border-left: 4px solid #0197a0;
+        }
+        
+        .demo-info strong {
+            color: #0d5f6f;
+        }
+        
+        .demo-info p {
+            margin: 5px 0;
+        }
+        
+        .footer-links {
+            text-align: center;
+            margin-top: 20px;
+            font-size: 13px;
+        }
+        
+        .footer-links a {
+            color: #667eea;
+            text-decoration: none;
+            margin: 0 5px;
+        }
+        
+        .footer-links a:hover {
+            text-decoration: underline;
+        }
+        
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .tab-btn {
+            flex: 1;
+            padding: 10px;
+            background: #f0f0f0;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: 600;
+            color: #666;
+            transition: all 0.3s;
+        }
+        
+        .tab-btn.active {
+            background: #667eea;
+            color: white;
+        }
+        
+        .register-form {
+            display: none;
+        }
+        
+        .register-form.show {
+            display: block;
+        }
+        
+        .login-form.hide {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="logo-section">
+            <div class="logo">👤</div>
+            <h1>Citizen Portal</h1>
+            <p class="subtitle">RCPI Waste AI - Track Your Waste</p>
+        </div>
+        
+        <div class="tabs">
+            <button class="tab-btn active" onclick="switchTab('login')">Login</button>
+            <button class="tab-btn" onclick="switchTab('register')">Register</button>
+        </div>
+        
+        <!-- LOGIN FORM -->
+        <form method="POST" class="login-form" action="/citizen-login">
+            <div class="demo-info">
+                <strong>📝 Demo Account:</strong><br>
+                <p>Username: <strong>test_citizen</strong></p>
+                <p>Password: <strong>citizen@123</strong></p>
+            </div>
+            
+            <div class="error-message" id="loginError"></div>
+            
+            <div class="form-group">
+                <label for="login-username">Username</label>
+                <input type="text" id="login-username" name="username" placeholder="Enter your username" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="login-password">Password</label>
+                <input type="password" id="login-password" name="password" placeholder="Enter your password" required>
+            </div>
+            
+            <button type="submit" class="login-btn">🔓 Login</button>
+        </form>
+        
+        <!-- REGISTER FORM -->
+        <form class="register-form" onsubmit="handleRegister(event)">
+            <div class="error-message" id="registerError"></div>
+            
+            <div class="form-group">
+                <label for="reg-username">Username</label>
+                <input type="text" id="reg-username" placeholder="Choose a username" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="reg-email">Email</label>
+                <input type="email" id="reg-email" placeholder="Your email address" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="reg-password">Password</label>
+                <input type="password" id="reg-password" placeholder="Create a password" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="reg-name">Full Name</label>
+                <input type="text" id="reg-name" placeholder="Your full name" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="reg-phone">Phone</label>
+                <input type="tel" id="reg-phone" placeholder="Your phone number" required>
+            </div>
+            
+            <button type="submit" class="login-btn">✅ Register</button>
+        </form>
+        
+        <div class="footer-links">
+            <a href="/">← Back to Home</a>
+        </div>
+        <div style="text-align:center; margin-top:16px; font-size:13px; color:#666;">Powered by RCPI India Private Limited</div>
+    </div>
+    
+    <script>
+        function switchTab(tab) {
+            const loginForm = document.querySelector('.login-form');
+            const registerForm = document.querySelector('.register-form');
+            const tabBtns = document.querySelectorAll('.tab-btn');
+            
+            tabBtns.forEach(btn => btn.classList.remove('active'));
+            
+            if (tab === 'login') {
+                loginForm.classList.remove('hide');
+                registerForm.classList.remove('show');
+                tabBtns[0].classList.add('active');
+            } else {
+                loginForm.classList.add('hide');
+                registerForm.classList.add('show');
+                tabBtns[1].classList.add('active');
+            }
+        }
+        
+        function handleLogin(event) {
+            event.preventDefault();
+            const username = document.getElementById('login-username').value;
+            const password = document.getElementById('login-password').value;
+            const errorDiv = document.getElementById('loginError');
+            
+            if (username === 'test_citizen' && password === 'citizen@123') {
+                localStorage.setItem('citizen_token', 'citizen_session_' + Date.now());
+                localStorage.setItem('user_role', 'citizen');
+                localStorage.setItem('username', username);
+                window.location.href = '/citizen-dashboard';
+            } else {
+                errorDiv.textContent = '❌ Invalid credentials. Try test_citizen / citizen@123';
+                errorDiv.classList.add('show');
+                setTimeout(() => {
+                    errorDiv.classList.remove('show');
+                }, 5000);
+            }
+        }
+        
+        function handleRegister(event) {
+            event.preventDefault();
+            const errorDiv = document.getElementById('registerError');
+            
+            const username = document.getElementById('reg-username').value;
+            const email = document.getElementById('reg-email').value;
+            
+            if (username.length < 3) {
+                errorDiv.textContent = '❌ Username must be at least 3 characters';
+                errorDiv.classList.add('show');
+                return;
+            }
+            
+            // Simulate registration
+            localStorage.setItem('citizen_token', 'citizen_session_' + Date.now());
+            localStorage.setItem('user_role', 'citizen');
+            localStorage.setItem('username', username);
+            
+            alert('✅ Registration successful! Welcome, ' + username);
+            window.location.href = '/citizen-dashboard';
+        }
+    </script>
+</body>
+</html>

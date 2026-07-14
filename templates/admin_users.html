@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin User Management - RCPI Waste AI</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f5f7fb; margin: 0; padding: 0; }
+        .navbar { background: #667eea; color: white; padding: 18px 24px; display: flex; justify-content: space-between; align-items: center; }
+        .navbar a { color: white; text-decoration: none; margin-left: 16px; }
+        .container { max-width: 1200px; margin: 30px auto; padding: 0 20px; }
+        h1 { color: #333; margin-bottom: 10px; }
+        .message { background: #e8f5e9; color: #2e7d32; padding: 12px 16px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #c8e6c9; }
+        .user-filters { margin-bottom: 20px; display: flex; flex-wrap: wrap; gap: 10px; }
+        .user-filters a { padding: 10px 16px; background: #fff; border: 1px solid #dde2f1; color: #333; border-radius: 8px; text-decoration: none; }
+        .user-filters a.active { background: #667eea; color: white; border-color: #667eea; }
+        .grid { display: grid; gap: 24px; grid-template-columns: 1fr 360px; }
+        .card { background: white; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.08); padding: 24px; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 14px 12px; text-align: left; border-bottom: 1px solid #e7eaf0; }
+        th { color: #667; font-size: 14px; }
+        td { color: #444; font-size: 14px; }
+        .badge { display: inline-block; padding: 6px 10px; border-radius: 999px; font-size: 12px; color: white; }
+        .badge-admin { background: #4e73df; }
+        .badge-citizen { background: #20c997; }
+        .badge-driver { background: #fd7e14; }
+        .badge-staff { background: #6f42c1; }
+        .badge-supervisor { background: #17a2b8; }
+        .status-active { background: #28a745; }
+        .status-inactive { background: #dc3545; }
+        .form-group { margin-bottom: 18px; }
+        label { display: block; margin-bottom: 8px; color: #333; font-weight: 600; }
+        input, select { width: 100%; padding: 12px 14px; border: 1px solid #dfe4ed; border-radius: 8px; font-size: 14px; }
+        button { padding: 12px 20px; border: none; border-radius: 8px; background: #667eea; color: white; font-size: 15px; cursor: pointer; }
+        button:hover { background: #5568d3; }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div>🧑‍💼 Admin User Management</div>
+        <div>
+            <a href="/admin-dashboard">Dashboard</a>
+            <a href="/reports">Reports</a>
+            <a href="/logout">Logout</a>
+        </div>
+    </nav>
+    <div class="container">
+        <h1>User Management</h1>
+        {% if message %}
+            <div class="message">{{ message }}</div>
+        {% endif %}
+
+        <div class="user-filters">
+            <a class="{% if selected_role == 'all' %}active{% endif %}" href="/admin-users?role=all">All</a>
+            <a class="{% if selected_role == 'admin' %}active{% endif %}" href="/admin-users?role=admin">Admin</a>
+            <a class="{% if selected_role == 'supervisor' %}active{% endif %}" href="/admin-users?role=supervisor">Supervisor</a>
+            <a class="{% if selected_role == 'driver' %}active{% endif %}" href="/admin-users?role=driver">Driver</a>
+            <a class="{% if selected_role == 'staff' %}active{% endif %}" href="/admin-users?role=staff">Staff</a>
+            <a class="{% if selected_role == 'citizen' %}active{% endif %}" href="/admin-users?role=citizen">Citizen</a>
+        </div>
+
+        <div class="grid">
+            <div class="card">
+                <h2>Existing Users</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Username</th>
+                            <th>Email</th>
+                            <th>Role</th>
+                            <th>Status</th>
+                            <th>Created At</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for user in users %}
+                        <tr>
+                            <td>{{ user.username }}</td>
+                            <td>{{ user.email }}</td>
+                            <td>
+                                <span class="badge badge-{{ user.role.replace('_', '-') }}">{{ user.role.title() }}</span>
+                            </td>
+                            <td>
+                                <span class="badge {% if user.is_active %}status-active{% else %}status-inactive{% endif %}">{% if user.is_active %}Active{% else %}Inactive{% endif %}</span>
+                            </td>
+                            <td>{{ user.created_at }}</td>
+                            <td>
+                                <form method="POST" action="/admin-users-action" style="display:inline-block; margin-right:8px;">
+                                    <input type="hidden" name="user_id" value="{{ user.id }}">
+                                    <input type="hidden" name="action" value="{% if user.is_active %}deactivate{% else %}activate{% endif %}">
+                                    <button type="submit" style="background:#17a2b8;">{% if user.is_active %}Deactivate{% else %}Activate{% endif %}</button>
+                                </form>
+                                <form method="POST" action="/admin-users-action" style="display:inline-block;">
+                                    <input type="hidden" name="user_id" value="{{ user.id }}">
+                                    <input type="hidden" name="action" value="delete">
+                                    <button type="submit" style="background:#dc3545;">Delete</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="card">
+                <h2>Create New User</h2>
+                <form method="POST" action="/admin-users">
+                    <div class="form-group">
+                        <label for="username">Username</label>
+                        <input name="username" id="username" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="email">Email</label>
+                        <input type="email" name="email" id="email" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="password">Password</label>
+                        <input type="password" name="password" id="password" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="full_name">Full Name</label>
+                        <input name="full_name" id="full_name">
+                    </div>
+                    <div class="form-group">
+                        <label for="phone">Phone</label>
+                        <input name="phone" id="phone">
+                    </div>
+                    <div class="form-group">
+                        <label for="role">Role</label>
+                        <select name="role" id="role" required>
+                            <option value="admin">Admin</option>
+                            <option value="supervisor">Supervisor</option>
+                            <option value="driver">Driver</option>
+                            <option value="staff">Staff</option>
+                            <option value="citizen" selected>Citizen</option>
+                        </select>
+                    </div>
+                    <button type="submit">Create User</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

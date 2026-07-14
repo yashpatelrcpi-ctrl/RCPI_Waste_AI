@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard - RCPI Waste AI</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f5f5;
+        }
+        
+        .navbar {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        
+        .navbar-brand {
+            font-size: 24px;
+            font-weight: bold;
+        }
+        
+        .navbar-links {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+        }
+        
+        .navbar-links a, .navbar-links button {
+            color: white;
+            text-decoration: none;
+            cursor: pointer;
+            background: none;
+            border: none;
+            font-size: 14px;
+            transition: opacity 0.3s;
+        }
+        
+        .navbar-links a:hover, .navbar-links button:hover {
+            opacity: 0.8;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 30px;
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 30px;
+            font-size: 32px;
+        }
+        
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .stat-card {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            border-left: 5px solid #667eea;
+        }
+        
+        .stat-card h3 {
+            color: #666;
+            font-size: 14px;
+            text-transform: uppercase;
+            margin-bottom: 10px;
+            letter-spacing: 1px;
+        }
+        
+        .stat-value {
+            font-size: 32px;
+            font-weight: bold;
+            color: #667eea;
+        }
+        
+        .stat-icon {
+            font-size: 24px;
+            float: right;
+        }
+        
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .chart-card {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        
+        .chart-card h3 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 18px;
+        }
+        
+        .chart-container {
+            position: relative;
+            height: 300px;
+        }
+        
+        .table-section {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            margin-bottom: 30px;
+        }
+        
+        .section-title {
+            font-size: 20px;
+            color: #333;
+            margin-bottom: 20px;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 10px;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        th {
+            background-color: #f8f9fa;
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+            color: #333;
+            border-bottom: 2px solid #dee2e6;
+        }
+        
+        td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #dee2e6;
+        }
+        
+        tr:hover {
+            background-color: #f9f9f9;
+        }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        
+        .status-pending {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+        
+        .status-resolved {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        
+        .status-in-progress {
+            background-color: #d1ecf1;
+            color: #0c5460;
+        }
+        
+        .action-btn {
+            background-color: #667eea;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: background-color 0.3s;
+        }
+        
+        .action-btn:hover {
+            background-color: #5568d3;
+        }
+        
+        .export-btn {
+            background-color: #28a745;
+            padding: 10px 20px;
+            margin-bottom: 20px;
+        }
+        
+        .export-btn:hover {
+            background-color: #218838;
+        }
+        
+        .esg-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .esg-card {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            border-top: 4px solid #667eea;
+        }
+        
+        .esg-score {
+            font-size: 48px;
+            font-weight: bold;
+            color: #667eea;
+            margin: 15px 0;
+        }
+        
+        .esg-label {
+            color: #666;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .carbon-metric {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            margin-bottom: 15px;
+        }
+        
+        .carbon-metric h4 {
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+        
+        .metric-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .metric-label {
+            color: #666;
+            font-size: 12px;
+            margin-top: 5px;
+        }
+        
+        @media (max-width: 768px) {
+            .dashboard-grid, .charts-grid, .esg-cards {
+                grid-template-columns: 1fr;
+            }
+            
+            .container {
+                padding: 15px;
+            }
+            
+            h1 {
+                font-size: 24px;
+            }
+            
+            .navbar {
+                flex-direction: column;
+                gap: 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="navbar-brand">🗑️ RCPI Waste AI - Admin Dashboard</div>
+        <div class="navbar-links">
+            <a href="/">Dashboard</a>
+            <a href="/admin-analytics">Analytics</a>
+            <a href="/reports">Reports</a>
+            <a href="/esg-report">ESG Report</a>
+            <a href="/logout">🚪 Logout</a>
+        </div>
+    </nav>
+    
+    <div class="container">
+        <h1>📊 Administration Dashboard</h1>
+        
+        <!-- Key Statistics -->
+        <div class="dashboard-grid">
+            <div class="stat-card">
+                <div class="stat-icon">📋</div>
+                <h3>Total Complaints</h3>
+                <div class="stat-value">{{ total_complaints }}</div>
+            </div>
+            
+            <div class="stat-card">
+                <div class="stat-icon">⏳</div>
+                <h3>Pending</h3>
+                <div class="stat-value">{{ pending_complaints }}</div>
+            </div>
+            
+            <div class="stat-card">
+                <div class="stat-icon">✅</div>
+                <h3>Resolved</h3>
+                <div class="stat-value">{{ resolved_complaints }}</div>
+            </div>
+            
+            <div class="stat-card">
+                <div class="stat-icon">🚛</div>
+                <h3>Active Vehicles</h3>
+                <div class="stat-value">{{ active_vehicles }}</div>
+            </div>
+            
+            <div class="stat-card">
+                <div class="stat-icon">🗺️</div>
+                <h3>Total Wards</h3>
+                <div class="stat-value">{{ total_wards }}</div>
+            </div>
+            
+            <div class="stat-card">
+                <div class="stat-icon">♻️</div>
+                <h3>Waste Collected</h3>
+                <div class="stat-value">{{ total_waste }} kg</div>
+            </div>
+        </div>
+        
+        <!-- ESG Scores -->
+        <h2 style="font-size: 20px; color: #333; margin: 30px 0 20px 0;">🌍 ESG Performance Scores</h2>
+        <div class="esg-cards">
+            <div class="esg-card">
+                <div class="esg-label">Environmental Score</div>
+                <div class="esg-score">72.5</div>
+                <div class="metric-label">Based on waste diversion & reduction</div>
+            </div>
+            
+            <div class="esg-card">
+                <div class="esg-label">Social Score</div>
+                <div class="esg-score">65.3</div>
+                <div class="metric-label">Based on complaint resolution</div>
+            </div>
+            
+            <div class="esg-card">
+                <div class="esg-label">Governance Score</div>
+                <div class="esg-score">78.9</div>
+                <div class="metric-label">Based on compliance & transparency</div>
+            </div>
+            
+            <div class="esg-card">
+                <div class="esg-label">ESG Average</div>
+                <div class="esg-score">72.2</div>
+                <div class="metric-label">Overall sustainability rating</div>
+            </div>
+        </div>
+        
+        <!-- Carbon Metrics -->
+        <h2 style="font-size: 20px; color: #333; margin: 30px 0 20px 0;">♻️ Carbon & Environmental Metrics</h2>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px;">
+            <div class="carbon-metric">
+                <h4>Total CO2 Saved This Month</h4>
+                <div class="metric-value">5,400 kg</div>
+                <div class="metric-label">Equivalent to 1.2 flights</div>
+            </div>
+            
+            <div class="carbon-metric">
+                <h4>Carbon Credits Earned</h4>
+                <div class="metric-value">5.4 Credits</div>
+                <div class="metric-label">Worth $81.00 USD</div>
+            </div>
+            
+            <div class="carbon-metric">
+                <h4>Waste Diversion Rate</h4>
+                <div class="metric-value">72.5%</div>
+                <div class="metric-label">Target: 75%</div>
+            </div>
+            
+            <div class="carbon-metric">
+                <h4>Per Capita Carbon</h4>
+                <div class="metric-value">54 kg</div>
+                <div class="metric-label">Per citizen monthly</div>
+            </div>
+        </div>
+        
+        <!-- Quick Actions -->
+        <h2 style="font-size: 20px; color: #333; margin: 30px 0 20px 0;">⚡ Quick Actions</h2>
+        <div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:20px;">
+            <a class="action-btn" href="/image-upload">AI Detect Image</a>
+            <a class="action-btn" href="/api/detect-waste">Detect API</a>
+            <a class="action-btn" href="/esg-report">ESG Report</a>
+            <a class="action-btn" href="/carbon-predictions">Carbon Predictions</a>
+            <a class="action-btn" href="/landfill-data">Landfill Data</a>
+            <a class="action-btn" href="/qr-bin">QR Waste Bin</a>
+            <a class="action-btn" href="/vehicle-tracking">Live Vehicle Tracking</a>
+            <a class="action-btn" href="/route-optimization">Route Optimization</a>
+            <a class="action-btn" href="/admin-users">Manage Users</a>
+        </div>
+        <div style="margin-bottom:20px;">
+            <a class="action-btn" href="/create-backup">Create Backup</a>
+            <a class="action-btn" href="/backup-db">Download Latest Backup</a>
+            <a class="action-btn" href="/carbon-dashboard">Carbon Dashboard</a>
+            <a class="action-btn" href="/carbon-calculator">CO2 Calculator</a>
+        </div>
+        
+        <!-- Charts -->
+        <div class="charts-grid">
+            <div class="chart-card">
+                <h3>📈 Complaint Status Distribution</h3>
+                <div class="chart-container">
+                    <canvas id="complaintChart"></canvas>
+                </div>
+            </div>
+            
+            <div class="chart-card">
+                <h3>♻️ Waste Collection by Type</h3>
+                <div class="chart-container">
+                    <canvas id="wasteChart"></canvas>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Recent Complaints -->
+        <div class="table-section">
+            <div class="section-title">📋 Recent Complaints</div>
+            <button class="action-btn export-btn">📥 Export to PDF</button>
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Citizen</th>
+                        <th>Ward</th>
+                        <th>Waste Type</th>
+                        <th>Status</th>
+                        <th>Date</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>#C001</td>
+                        <td>Raj Kumar</td>
+                        <td>Ward 5</td>
+                        <td>Mixed Waste</td>
+                        <td><span class="status-badge status-pending">Pending</span></td>
+                        <td>2024-07-13</td>
+                        <td><button class="action-btn">Assign</button></td>
+                    </tr>
+                    <tr>
+                        <td>#C002</td>
+                        <td>Priya Singh</td>
+                        <td>Ward 3</td>
+                        <td>E-waste</td>
+                        <td><span class="status-badge status-in-progress">In Progress</span></td>
+                        <td>2024-07-12</td>
+                        <td><button class="action-btn">Update</button></td>
+                    </tr>
+                    <tr>
+                        <td>#C003</td>
+                        <td>Amit Patel</td>
+                        <td>Ward 7</td>
+                        <td>Organic Waste</td>
+                        <td><span class="status-badge status-resolved">Resolved</span></td>
+                        <td>2024-07-11</td>
+                        <td><button class="action-btn">View</button></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Ward Performance -->
+        <div class="table-section">
+            <div class="section-title">🗺️ Ward Performance</div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Ward</th>
+                        <th>Complaints</th>
+                        <th>Waste Collected</th>
+                        <th>Collection %</th>
+                        <th>ESG Score</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Ward 1</td>
+                        <td>8</td>
+                        <td>2,450 kg</td>
+                        <td>85%</td>
+                        <td>74.5</td>
+                        <td><span class="status-badge status-resolved">Good</span></td>
+                    </tr>
+                    <tr>
+                        <td>Ward 3</td>
+                        <td>12</td>
+                        <td>3,600 kg</td>
+                        <td>72%</td>
+                        <td>68.2</td>
+                        <td><span class="status-badge status-in-progress">Fair</span></td>
+                    </tr>
+                    <tr>
+                        <td>Ward 5</td>
+                        <td>15</td>
+                        <td>4,200 kg</td>
+                        <td>65%</td>
+                        <td>62.1</td>
+                        <td><span class="status-badge status-pending">Needs Work</span></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+    <footer style="text-align:center; padding:20px; color:#666; margin-top:30px;">
+        <div>Powered by RCPI India Private Limited</div>
+        <div style="font-size:12px; opacity:0.8;">© 2024 RCPI Waste AI</div>
+    </footer>
+    <script>
+        // Complaint Status Chart
+        const ctx1 = document.getElementById('complaintChart').getContext('2d');
+        new Chart(ctx1, {
+            type: 'doughnut',
+            data: {
+                labels: ['Pending', 'In Progress', 'Resolved'],
+                datasets: [{
+                    data: [12, 8, 25],
+                    backgroundColor: ['#ffc107', '#17a2b8', '#28a745']
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom'
+                    }
+                }
+            }
+        });
+        
+        // Waste Collection Chart
+        const ctx2 = document.getElementById('wasteChart').getContext('2d');
+        new Chart(ctx2, {
+            type: 'bar',
+            data: {
+                labels: ['Organic', 'Recyclable', 'E-waste', 'Construction', 'Hazardous', 'Mixed'],
+                datasets: [{
+                    label: 'Waste (kg)',
+                    data: [3200, 2800, 1500, 2100, 800, 1600],
+                    backgroundColor: ['#28a745', '#17a2b8', '#dc3545', '#ffc107', '#e83e8c', '#6c757d']
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                }
+            }
+        });
+        
+        // Logout handled by server at /logout
+    </script>
+</body>
+</html>

@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RCPI Waste AI - Dashboard</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .navbar {
+            background-color: rgba(0, 0, 0, 0.8);
+            padding: 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .navbar h1 {
+            color: #fff;
+            margin: 0;
+            font-size: 1.8rem;
+        }
+        .nav-links {
+            display: flex;
+            gap: 1.5rem;
+        }
+        .nav-links a {
+            color: #fff;
+            text-decoration: none;
+            padding: 0.5rem 1rem;
+            border-radius: 5px;
+            transition: background 0.3s;
+        }
+        .nav-links a:hover {
+            background-color: rgba(255, 255, 255, 0.2);
+        }
+        .container {
+            max-width: 1200px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+        }
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        .card {
+            background: white;
+            border-radius: 10px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+        }
+        .card-number {
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: #667eea;
+            margin: 1rem 0;
+        }
+        .card-label {
+            font-size: 0.9rem;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .action-buttons {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-top: 2rem;
+        }
+        .btn {
+            padding: 1rem;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: bold;
+            text-decoration: none;
+            text-align: center;
+            transition: all 0.3s;
+            display: inline-block;
+        }
+        .btn-primary {
+            background-color: #667eea;
+            color: white;
+        }
+        .btn-primary:hover {
+            background-color: #5568d3;
+            transform: scale(1.05);
+        }
+        .btn-success {
+            background-color: #48bb78;
+            color: white;
+        }
+        .btn-success:hover {
+            background-color: #38a169;
+        }
+        .btn-warning {
+            background-color: #ed8936;
+            color: white;
+        }
+        .btn-warning:hover {
+            background-color: #dd6b20;
+        }
+        .btn-info {
+            background-color: #4299e1;
+            color: white;
+        }
+        .btn-info:hover {
+            background-color: #3182ce;
+        }
+        .footer {
+            text-align: center;
+            color: white;
+            padding: 2rem;
+            margin-top: 2rem;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <h1>🗑️ RCPI Waste AI</h1>
+        <div class="nav-links">
+            <a href="/">Dashboard</a>
+            <a href="/wards">Wards</a>
+            <a href="/vehicles">Vehicles</a>
+            <a href="/waste-collection">Waste Collection</a>
+            <a href="/complaints">Complaints</a>
+            <a href="/reports">Reports</a>
+            <a href="/ai-support">AI Support</a>
+            <a href="/admin-login">Admin</a>
+            <a href="/supervisor-login">Supervisor</a>
+            <a href="/driver-login">Driver</a>
+            <a href="/staff-login">Staff</a>
+            <a href="/citizen-login">Citizen</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <h2 style="color: white; text-align: center;">Dashboard Overview</h2>
+        
+        <div class="dashboard-grid">
+            <div class="card">
+                <div class="card-label">Pending Complaints</div>
+                <div class="card-number">{{ pending_complaints }}</div>
+            </div>
+            
+            <div class="card">
+                <div class="card-label">Active Vehicles</div>
+                <div class="card-number">{{ active_vehicles }}</div>
+            </div>
+            
+            <div class="card">
+                <div class="card-label">Total Wards</div>
+                <div class="card-number">{{ total_wards }}</div>
+            </div>
+            
+            <div class="card">
+                <div class="card-label">Total Waste Collected</div>
+                <div class="card-number">{{ total_waste | int }}</div>
+                <div style="font-size: 0.8rem; color: #999;">Kg</div>
+            </div>
+            
+            <div class="card">
+                <div class="card-label">Total Collections</div>
+                <div class="card-number">{{ total_collections }}</div>
+            </div>
+        </div>
+
+        <h3 style="color: white; margin-top: 2rem;">Quick Actions</h3>
+        <div class="action-buttons">
+            <a href="/complaints" class="btn btn-primary">📝 File Complaint</a>
+            <a href="/vehicles" class="btn btn-success">🚗 Add Vehicle</a>
+            <a href="/wards" class="btn btn-warning">🏘️ Add Ward</a>
+            <a href="/waste-collection" class="btn btn-info">♻️ Record Waste</a>
+            <a href="/reports" class="btn btn-primary">📊 View Reports</a>
+            <a href="/ai-support" class="btn btn-success">🤖 AI Support</a>
+        </div>
+    </div>
+
+    <div class="footer">
+        <p>&copy; 2024 RCPI Waste Management System. All rights reserved.</p>
+    </div>
+</body>
+</html>

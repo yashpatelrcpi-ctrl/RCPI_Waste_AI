@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RCPI Waste AI - Advanced Waste Management System</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        
+        .navbar {
+            background: rgba(0, 0, 0, 0.2);
+            color: white;
+            padding: 20px 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .navbar-brand {
+            font-size: 28px;
+            font-weight: bold;
+        }
+        
+        .nav-links {
+            display: flex;
+            gap: 20px;
+        }
+        
+        .nav-links a {
+            color: white;
+            text-decoration: none;
+            transition: opacity 0.3s;
+        }
+        
+        .nav-links a:hover {
+            opacity: 0.8;
+        }
+        
+        .hero {
+            background: white;
+            margin: 40px;
+            padding: 60px 40px;
+            border-radius: 15px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+            text-align: center;
+        }
+        
+        .hero h1 {
+            font-size: 48px;
+            color: #667eea;
+            margin-bottom: 20px;
+        }
+        
+        .hero p {
+            font-size: 18px;
+            color: #666;
+            margin-bottom: 30px;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        
+        .btn-large {
+            padding: 15px 40px;
+            font-size: 16px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: transform 0.2s, box-shadow 0.2s;
+            text-decoration: none;
+            display: inline-block;
+        }
+        
+        .btn-admin {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .btn-admin:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-citizen {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+        }
+        
+        .btn-citizen:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 5px 20px rgba(245, 87, 108, 0.4);
+        }
+        
+        .features {
+            max-width: 1200px;
+            margin: 40px auto;
+            padding: 0 40px;
+        }
+        
+        .features h2 {
+            color: white;
+            text-align: center;
+            font-size: 36px;
+            margin-bottom: 40px;
+        }
+        
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 25px;
+        }
+        
+        .feature-card {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.2);
+            text-align: center;
+        }
+        
+        .feature-icon {
+            font-size: 48px;
+            margin-bottom: 15px;
+        }
+        
+        .feature-card h3 {
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+        
+        .feature-card p {
+            color: #666;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        
+        .stats {
+            background: white;
+            margin: 40px;
+            padding: 40px;
+            border-radius: 15px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+        }
+        
+        .stats h2 {
+            color: #667eea;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .stat-items {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+        }
+        
+        .stat-item {
+            text-align: center;
+            padding: 20px;
+            background: #f9f9f9;
+            border-radius: 8px;
+        }
+        
+        .stat-value {
+            font-size: 36px;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+        
+        .stat-label {
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .footer {
+            background: rgba(0, 0, 0, 0.2);
+            color: white;
+            text-align: center;
+            padding: 30px;
+            margin-top: 40px;
+        }
+        
+        @media (max-width: 768px) {
+            .hero h1 {
+                font-size: 32px;
+            }
+            
+            .button-group {
+                flex-direction: column;
+            }
+            
+            .navbar {
+                flex-direction: column;
+                gap: 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="navbar-brand">🗑️ RCPI Waste AI</div>
+        <div class="nav-links">
+            <a href="/admin-login">Admin</a>
+            <a href="/supervisor-login">Supervisor</a>
+            <a href="/driver-login">Driver</a>
+            <a href="/staff-login">Staff</a>
+            <a href="/citizen-login">Citizen</a>
+        </div>
+    </nav>
+    
+    <div class="hero">
+        <h1>🌍 Advanced Waste Management System</h1>
+        <p>Complete AI-powered solution for municipal waste collection, tracking, and environmental sustainability with real-time analytics and citizen engagement.</p>
+        
+        <div class="button-group">
+            <a href="/admin-login" class="btn-large btn-admin">🔐 Admin Dashboard</a>
+            <a href="/citizen-login" class="btn-large btn-citizen">👤 Citizen Portal</a>
+        </div>
+    </div>
+    
+    <div class="features">
+        <h2>✨ Advanced Features</h2>
+        <div class="feature-grid">
+            <div class="feature-card">
+                <div class="feature-icon">🤖</div>
+                <h3>AI Waste Detection</h3>
+                <p>Real-time image analysis with camera uploads and GPS location tracking for accurate waste classification.</p>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-icon">📊</div>
+                <h3>Live Analytics</h3>
+                <p>Real-time dashboards with ward-wise complaints, waste type charts, and collection efficiency metrics.</p>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-icon">♻️</div>
+                <h3>Carbon Tracking</h3>
+                <p>Calculate CO2 saved, carbon credits earned, and environmental impact of proper waste management.</p>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-icon">🌍</div>
+                <h3>ESG Scoring</h3>
+                <p>Environmental, Social, and Governance scores with recommendations for sustainability improvements.</p>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-icon">🔮</div>
+                <h3>AI Predictions</h3>
+                <p>Carbon emission forecasting and waste trend analysis for 30+ days with improvement scenarios.</p>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-icon">📥</div>
+                <h3>Report Export</h3>
+                <p>Generate PDF, Excel, and CSV reports for complaints, waste, carbon data, and monthly summaries.</p>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-icon">🔔</div>
+                <h3>Multi-Channel Alerts</h3>
+                <p>Email, SMS, and WhatsApp notifications for status updates and collection schedules.</p>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-icon">🗺️</div>
+                <h3>GPS Tracking</h3>
+                <p>Location-based waste hotspot identification and collection route optimization.</p>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-icon">👥</div>
+                <h3>Work Assignment</h3>
+                <p>Staff assignment system with complaint tracking and resolution monitoring.</p>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-icon">💎</div>
+                <h3>Carbon Credits</h3>
+                <p>Earn and redeem carbon credits for sustainable waste practices with monetary value.</p>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-icon">📈</div>
+                <h3>Citizen Tracking</h3>
+                <p>Personal dashboards for citizens to track complaints, waste history, and carbon savings.</p>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-icon">🔐</div>
+                <h3>Secure Access</h3>
+                <p>Role-based authentication, session management, and activity logging for data security.</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="stats">
+        <h2>📊 System Overview</h2>
+        <div class="stat-items">
+            <div class="stat-item">
+                <div class="stat-value">6</div>
+                <div class="stat-label">Waste Categories</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value">100+</div>
+                <div class="stat-label">Training Data Points</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value">Unlimited</div>
+                <div class="stat-label">User Accounts</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value">Real-Time</div>
+                <div class="stat-label">Analytics</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value">AI-Powered</div>
+                <div class="stat-label">Detection</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value">3 Formats</div>
+                <div class="stat-label">Report Export</div>
+            </div>
+        </div>
+    </div>
+    
+        <div class="footer">
+        <p>🚀 RCPI Waste AI - Advanced Municipal Waste Management Solution</p>
+        <p style="margin-top: 10px; opacity: 0.8;">© 2024 All Rights Reserved. Powered by AI & Machine Learning.</p>
+        <p style="margin-top: 6px; font-size: 14px;">Powered by RCPI India Private Limited</p>
+        
+        <div style="margin-top: 20px; font-size: 14px;">
+            <p><strong>Demo Credentials:</strong></p>
+            <p>Admin: username=admin, password=admin@123</p>
+            <p>Citizen: username=test_citizen, password=citizen@123</p>
+        </div>
+    </div>
+</body>
+</html>
