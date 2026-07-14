@@ -1,11 +1,11 @@
 from fastapi import FastAPI, Request, Form, UploadFile, File
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse, JSONResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
 from starlette.exceptions import HTTPException as StarletteHTTPException
-from database import create_database, create_ward_database, create_vehicle_database, create_waste_collection_database, initialize_all_databases, get_connection
+from database import initialize_all_databases, get_connection
 from waste_manager import get_collection_stats
 from ai_engine import get_ai_response
 from app_routes import router as advanced_router
@@ -24,6 +24,7 @@ if (BASE_DIR / "static").exists():
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     error_detail = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
     return templates.TemplateResponse(
+        request,
         "error.html",
         {
             "request": request,
@@ -37,6 +38,7 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     return templates.TemplateResponse(
+        request,
         "error.html",
         {
             "request": request,
@@ -51,6 +53,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 @app.exception_handler(Exception)
 async def generic_exception_handler(request: Request, exc: Exception):
     return templates.TemplateResponse(
+        request,
         "error.html",
         {
             "request": request,
