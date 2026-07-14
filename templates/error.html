@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Error {{ status_code }}</title>
+    <style>
+        body { font-family: Arial, sans-serif; background: #f8fafc; color: #111827; margin: 0; padding: 40px; }
+        .container { max-width: 700px; margin: 0 auto; background: white; border-radius: 12px; box-shadow: 0 12px 40px rgba(15,23,42,.08); padding: 32px; }
+        h1 { margin: 0 0 12px; font-size: 2.4rem; color: #111827; }
+        p { line-height: 1.6; margin: 16px 0; }
+        .meta { color: #6b7280; font-size: 0.95rem; }
+        .btn { display: inline-block; margin-top: 20px; padding: 12px 22px; background: #2563eb; color: white; text-decoration: none; border-radius: 8px; }
+        .details { margin-top: 24px; background: #f3f4f6; padding: 16px; border-radius: 10px; font-size: 0.95rem; color: #374151; }
+        .details pre { white-space: pre-wrap; word-wrap: break-word; margin: 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Error {{ status_code }}</h1>
+        <p>Sorry, something went wrong while processing your request.</p>
+        <p class="meta"><strong>Path:</strong> {{ path }}</p>
+        <p class="meta"><strong>Message:</strong> {{ error }}</p>
+        {% if details %}
+        <div class="details">
+            <strong>Details:</strong>
+            <pre>{{ details }}</pre>
+        </div>
+        {% endif %}
+        <a class="btn" href="/">Go back home</a>
+    </div>
+</body>
+</html>

@@ -1,7 +1,16 @@
 import sqlite3
 import os
+from pathlib import Path
 
-DATABASE_NAME = os.getenv("WASTE_DB_PATH", "waste_ai.db")
+BASE_DIR = Path(__file__).resolve().parent
+
+DEFAULT_DB_PATH = os.getenv("WASTE_DB_PATH")
+if DEFAULT_DB_PATH:
+    DATABASE_NAME = DEFAULT_DB_PATH
+elif os.name == "nt":
+    DATABASE_NAME = str(BASE_DIR / "waste_ai.db")
+else:
+    DATABASE_NAME = os.getenv("WASTE_DB_PATH", "/tmp/waste_ai.db")
 
 
 def get_database_name():

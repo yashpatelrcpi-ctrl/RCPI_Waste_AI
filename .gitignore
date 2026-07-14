@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.db
+tmp_test_app.py
+.env
+.env.*
+.vscode/
+*.log
+.DS_Store

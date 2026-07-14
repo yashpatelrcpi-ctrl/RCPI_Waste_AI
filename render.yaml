@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: rcpi-waste-ai
+    env: python
+    plan: free
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "uvicorn app:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: WASTE_DB_PATH
+        value: "/tmp/waste_ai.db"

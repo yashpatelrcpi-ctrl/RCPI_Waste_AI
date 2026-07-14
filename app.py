@@ -1,8 +1,10 @@
 from fastapi import FastAPI, Request, Form, UploadFile, File
-from fastapi.responses import HTMLResponse
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from database import create_database, create_ward_database, create_vehicle_database, create_waste_collection_database, initialize_all_databases, get_connection
 from waste_manager import get_collection_stats
 from ai_engine import get_ai_response
@@ -17,8 +19,64 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 if (BASE_DIR / "static").exists():
     app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
+# Global error handlers
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    error_detail = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
+    return templates.TemplateResponse(
+        "error.html",
+        {
+            "request": request,
+            "status_code": exc.status_code,
+            "error": error_detail,
+            "path": request.url.path
+        },
+        status_code=exc.status_code
+    )
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    return templates.TemplateResponse(
+        "error.html",
+        {
+            "request": request,
+            "status_code": 400,
+            "error": "Invalid request parameters or query string.",
+            "details": exc.errors(),
+            "path": request.url.path
+        },
+        status_code=400
+    )
+
+@app.exception_handler(Exception)
+async def generic_exception_handler(request: Request, exc: Exception):
+    return templates.TemplateResponse(
+        "error.html",
+        {
+            "request": request,
+            "status_code": 500,
+            "error": "An unexpected server error occurred.",
+            "details": str(exc),
+            "path": request.url.path
+        },
+        status_code=500
+    )
+
 # Include advanced routes
 app.include_router(advanced_router)
+
+
+@app.get('/favicon.ico')
+async def favicon():
+    icon_path = BASE_DIR / 'static' / 'favicon.ico'
+    if icon_path.exists():
+        return FileResponse(icon_path)
+    return RedirectResponse('https://fastapi.tiangolo.com/img/favicon.png')
+
+
+@app.get('/health')
+async def health():
+    return {'status': 'ok'}
 
 
 # initialize database (uses central `database.py` schema)
