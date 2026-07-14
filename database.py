@@ -7,17 +7,24 @@ BASE_DIR = Path(__file__).resolve().parent
 DEFAULT_DB_PATH = os.getenv("WASTE_DB_PATH")
 if DEFAULT_DB_PATH:
     DATABASE_NAME = DEFAULT_DB_PATH
-elif os.name == "nt":
-    DATABASE_NAME = str(BASE_DIR / "waste_ai.db")
 else:
-    DATABASE_NAME = os.getenv("WASTE_DB_PATH", "/tmp/waste_ai.db")
+    DATABASE_NAME = str(BASE_DIR / "waste_ai.db")
 
 
 def get_database_name():
-    db_name = os.getenv("WASTE_DB_PATH", DATABASE_NAME)
-    if not db_name:
-        raise ValueError("WASTE_DB_PATH is not configured and no default database path is available")
-    return db_name
+    env_db = os.getenv("WASTE_DB_PATH")
+    if env_db:
+        try:
+            env_path = Path(env_db)
+            if not env_path.is_absolute():
+                env_path = BASE_DIR / env_path
+            env_path = env_path.resolve()
+            _ensure_database_directory(str(env_path))
+            return str(env_path)
+        except Exception:
+            pass
+
+    return str(BASE_DIR / "waste_ai.db")
 
 
 def _ensure_database_directory(db_name: str):

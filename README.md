@@ -124,19 +124,41 @@ pip
 pip install -r requirements.txt
 ```
 
-### Step 2: Run the Application
+### Step 2: Run the Application Locally
 ```bash
-uvicorn app:app --reload
+python app.py
 ```
 
-### Step 3: Access the System
+Or, run with uvicorn directly:
+```bash
+uvicorn app:app --host 127.0.0.1 --port 8000 --reload
+```
+
+### Step 3: Access the System Locally
 ```
 Homepage: http://127.0.0.1:8000/
 Admin Dashboard: http://127.0.0.1:8000/admin-login
 Citizen Portal: http://127.0.0.1:8000/citizen-login
 ```
 
-### Step 4: Database Initialization
+### Step 4: Render Deployment
+This project includes `render.yaml` so it can be deployed to Render with the service name `rcpi-waste-ai`.
+
+- Push your repository to GitHub or connect it directly to Render.
+- In Render, create a new Web Service from this repository.
+- Render will use:
+  - Build command: `python -m pip install --upgrade pip && pip install -r requirements.txt`
+  - Start command: `python -m uvicorn app:app --host 0.0.0.0 --port $PORT`
+  - Health check path: `/health`
+- The app is configured to store the SQLite database in `/tmp/waste_ai.db` on Render.
+
+Live URL after deploy:
+
+```
+https://rcpi-waste-ai.onrender.com
+```
+
+### Step 5: Database Initialization
 The database is automatically initialized on app startup with all tables:
 - Users & Authentication
 - Complaints & Tracking
