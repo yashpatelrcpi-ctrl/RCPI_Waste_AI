@@ -247,6 +247,197 @@ class TestCarbonPredictionModel(BaseTestCase):
         self.assertIn('status', per_capita)
 
 
+class TestLiveDashboard(BaseTestCase):
+    def test_live_dashboard_renders_professional_overview(self):
+        client = TestClient(app_module.app)
+        response = client.get('/live-dashboard')
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('Live Operations Center', response.text)
+        self.assertIn('Active Vehicles', response.text)
+
+
+class TestComplaintWorkflow(BaseTestCase):
+    def test_complaint_submission_creates_record(self):
+        client = TestClient(app_module.app)
+        response = client.post('/complaints', data={
+            'citizen_name': 'Asha Rao',
+            'mobile': '9999999999',
+            'ward': 'Ward 2',
+            'location': 'Main Street',
+            'waste_type': 'Plastic',
+            'complaint': 'Plastic waste dumped near school',
+            'latitude': '12.97',
+            'longitude': '77.59',
+        })
+        self.assertEqual(response.status_code, 200)
+        conn = database.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM complaints")
+        self.assertGreaterEqual(cursor.fetchone()[0], 1)
+        conn.close()
+
+    def test_admin_complaints_page_can_update_status(self):
+        conn = database.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO complaints (name, mobile, ward, location, waste_type, complaint, status) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                       ('Ravi', '111', 'Ward 4', 'Park Road', 'Organic', 'Food waste issue', 'Pending'))
+        complaint_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+
+        client = TestClient(app_module.app)
+        response = client.post('/admin-complaints', data={
+            'complaint_id': complaint_id,
+            'status': 'In Progress',
+            'priority': 'High',
+            'remarks': 'Driver assigned',
+            'assigned_driver': 'Driver One',
+            'assigned_ward_officer': 'Officer Rao',
+        })
+        self.assertEqual(response.status_code, 200)
+        conn = database.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT status, priority, remarks, assigned_driver, assigned_ward_officer FROM complaints WHERE id = ?", (complaint_id,))
+        row = cursor.fetchone()
+        self.assertEqual(row[0], 'In Progress')
+        self.assertEqual(row[1], 'High')
+        self.assertEqual(row[2], 'Driver assigned')
+        conn.close()
+
+
+class TestCRUDAndSecurity(BaseTestCase):
+    def test_ward_crud_round_trip(self):
+        client = TestClient(app_module.app)
+        create_response = client.post('/wards', data={
+            'ward_name': 'Ward 9',
+            'area': 'North',
+            'email': 'ward9@example.com',
+            'address': 'North Street',
+            'supervisor': 'Officer A',
+            'population': '1200',
+            'waste_generation_kg': '450',
+            'vehicle_assignment': 'V-100',
+            'complaint_count': '3',
+        })
+        self.assertEqual(create_response.status_code, 200)
+
+        conn = database.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM wards WHERE ward_name = ?", ('Ward 9',))
+        ward_id = cursor.fetchone()[0]
+        conn.close()
+
+        update_response = client.post('/wards', data={
+            'ward_id': str(ward_id),
+            'ward_name': 'Ward 9 Updated',
+            'area': 'North',
+            'email': 'ward9@example.com',
+            'address': 'North Street',
+            'supervisor': 'Officer B',
+            'population': '1300',
+            'waste_generation_kg': '500',
+            'vehicle_assignment': 'V-101',
+            'complaint_count': '4',
+        })
+        self.assertEqual(update_response.status_code, 200)
+
+        conn = database.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT ward_name, supervisor, population FROM wards WHERE id = ?", (ward_id,))
+        row = cursor.fetchone()
+        conn.close()
+        self.assertEqual(row[0], 'Ward 9 Updated')
+        self.assertEqual(row[1], 'Officer B')
+        self.assertEqual(row[2], 1300)
+
+        delete_response = client.post('/wards/delete', data={'ward_id': str(ward_id)})
+        self.assertEqual(delete_response.status_code, 200)
+
+        conn = database.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM wards WHERE id = ?", (ward_id,))
+        self.assertEqual(cursor.fetchone()[0], 0)
+        conn.close()
+
+    def test_vehicle_crud_round_trip(self):
+        client = TestClient(app_module.app)
+        create_response = client.post('/vehicles', data={
+            'vehicle_number': 'V-200',
+            'vehicle_type': 'Compact',
+            'capacity': '1800',
+            'driver_name': 'Driver Two',
+            'ward_assigned': 'Ward 3',
+            'route': 'Route A',
+            'status': 'Active',
+        })
+        self.assertEqual(create_response.status_code, 200)
+
+        conn = database.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM vehicles WHERE vehicle_number = ?", ('V-200',))
+        vehicle_id = cursor.fetchone()[0]
+        conn.close()
+
+        update_response = client.post('/vehicles', data={
+            'vehicle_id': str(vehicle_id),
+            'vehicle_number': 'V-200',
+            'vehicle_type': 'Compact',
+            'capacity': '2000',
+            'driver_name': 'Driver Three',
+            'ward_assigned': 'Ward 4',
+            'route': 'Route B',
+            'status': 'Maintenance',
+        })
+        self.assertEqual(update_response.status_code, 200)
+
+        conn = database.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT driver_name, ward_assigned, route, status FROM vehicles WHERE id = ?", (vehicle_id,))
+        row = cursor.fetchone()
+        conn.close()
+        self.assertEqual(row[0], 'Driver Three')
+        self.assertEqual(row[1], 'Ward 4')
+        self.assertEqual(row[2], 'Route B')
+        self.assertEqual(row[3], 'Maintenance')
+
+        delete_response = client.post('/vehicles/delete', data={'vehicle_id': str(vehicle_id)})
+        self.assertEqual(delete_response.status_code, 200)
+
+        conn = database.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM vehicles WHERE id = ?", (vehicle_id,))
+        self.assertEqual(cursor.fetchone()[0], 0)
+        conn.close()
+
+    def test_complaint_delete_endpoint(self):
+        conn = database.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO complaints (name, mobile, ward, location, waste_type, complaint, status) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                       ('Delete Me', '222', 'Ward 2', 'Test', 'Plastic', 'Delete this', 'Pending'))
+        complaint_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+
+        client = TestClient(app_module.app)
+        response = client.post('/admin-complaints/delete', data={'complaint_id': str(complaint_id)})
+        self.assertEqual(response.status_code, 200)
+
+        conn = database.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM complaints WHERE id = ?", (complaint_id,))
+        self.assertEqual(cursor.fetchone()[0], 0)
+        conn.close()
+
+    def test_ai_support_with_image_upload_returns_guidance(self):
+        client = TestClient(app_module.app)
+        image_content = b'fake-image-bytes'
+        response = client.post('/ai-support', data={
+            'query': 'Where should I put this e-waste item?'
+        }, files={'image': ('photo.jpg', image_content, 'image/jpeg')})
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('Uploaded image', response.text)
+
+
 class TestNavigation(BaseTestCase):
     def test_detect_waste_link_opens_upload_page(self):
         client = TestClient(app_module.app)

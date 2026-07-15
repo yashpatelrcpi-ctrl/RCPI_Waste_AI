@@ -59,14 +59,23 @@ def create_database():
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS complaints(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        complaint_id TEXT UNIQUE,
         name TEXT NOT NULL,
         mobile TEXT,
         ward TEXT,
         location TEXT NOT NULL,
         waste_type TEXT NOT NULL,
         complaint TEXT NOT NULL,
-        status TEXT NOT NULL,
-        created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        status TEXT NOT NULL DEFAULT 'Pending',
+        priority TEXT DEFAULT 'Medium',
+        remarks TEXT,
+        assigned_driver TEXT,
+        assigned_ward_officer TEXT,
+        image_path TEXT,
+        gps_latitude REAL,
+        gps_longitude REAL,
+        created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
     """)
 
@@ -122,7 +131,6 @@ def create_ward_database():
     conn = get_connection()
     cursor = conn.cursor()
 
-    # Drop old table if it exists to recreate with new schema
     cursor.execute("DROP TABLE IF EXISTS wards")
     
     cursor.execute("""
@@ -131,7 +139,12 @@ def create_ward_database():
         ward_name TEXT,
         area TEXT,
         email TEXT,
-        address TEXT
+        address TEXT,
+        supervisor TEXT,
+        population INTEGER DEFAULT 0,
+        waste_generation_kg REAL DEFAULT 0,
+        vehicle_assignment TEXT,
+        complaint_count INTEGER DEFAULT 0
     )
     """)
 
@@ -153,7 +166,11 @@ def create_vehicle_database():
         capacity INTEGER,
         driver_name TEXT,
         status TEXT DEFAULT 'Active',
-        ward_assigned TEXT
+        ward_assigned TEXT,
+        route TEXT,
+        last_location TEXT,
+        daily_collection_kg REAL DEFAULT 0,
+        history TEXT DEFAULT ''
     )
     """)
 
@@ -190,8 +207,7 @@ def create_tracking_database():
     """Create complaint tracking and assignment tables"""
     conn = get_connection()
     cursor = conn.cursor()
-    
-    # Complaint tracking
+
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS complaint_tracking(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -204,8 +220,7 @@ def create_tracking_database():
         FOREIGN KEY(user_id) REFERENCES users(id)
     )
     """)
-    
-    # Work assignments
+
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS work_assignments(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -222,7 +237,19 @@ def create_tracking_database():
         FOREIGN KEY(assigned_by) REFERENCES users(id)
     )
     """)
-    
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS notifications(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        complaint_id INTEGER,
+        recipient TEXT,
+        channel TEXT,
+        message TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        delivered INTEGER DEFAULT 0
+    )
+    """)
+
     conn.commit()
     conn.close()
     print("Tracking Database Ready")

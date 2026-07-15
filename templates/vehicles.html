@@ -172,6 +172,18 @@
                     <label for="ward_assigned">Ward Assigned:</label>
                     <input type="text" id="ward_assigned" name="ward_assigned" required placeholder="Enter assigned ward">
                 </div>
+                <div class="form-group">
+                    <label for="route">Route:</label>
+                    <input type="text" id="route" name="route" placeholder="Route / zone">
+                </div>
+                <div class="form-group">
+                    <label for="status">Status:</label>
+                    <select id="status" name="status">
+                        <option value="Active">Active</option>
+                        <option value="Maintenance">Maintenance</option>
+                        <option value="Idle">Idle</option>
+                    </select>
+                </div>
                 <button type="submit">Add Vehicle</button>
             </form>
         </div>
@@ -188,6 +200,7 @@
                             <th>Driver</th>
                             <th>Status</th>
                             <th>Ward</th>
+                            <th>Route</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -199,6 +212,7 @@
                             <td>{{ vehicle[4] }}</td>
                             <td><span class="status-active">{{ vehicle[5] }}</span></td>
                             <td>{{ vehicle[6] }}</td>
+                            <td>{{ vehicle[7] or 'N/A' }}</td>
                         </tr>
                         {% endfor %}
                     </tbody>

@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Complaint Tracking</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; margin: 0; background: #f8fafc; }
+        .topbar { background: linear-gradient(135deg, #0f766e, #2563eb); color: white; padding: 16px 24px; }
+        .container { max-width: 1200px; margin: 24px auto; padding: 0 16px; }
+        .card { background: white; border-radius: 16px; padding: 20px; box-shadow: 0 10px 24px rgba(15,23,42,0.08); }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 10px; border-bottom: 1px solid #e2e8f0; text-align: left; }
+        .pill { display: inline-block; padding: 4px 8px; border-radius: 999px; background: #dbeafe; color: #1d4ed8; font-size: 0.8rem; }
+    </style>
+</head>
+<body>
+    <nav class="topbar">
+        <h2>📍 Complaint Timeline & Tracking</h2>
+    </nav>
+    <div class="container">
+        <div class="card">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Complaint ID</th>
+                        <th>Citizen</th>
+                        <th>Status</th>
+                        <th>Priority</th>
+                        <th>Assigned Driver</th>
+                        <th>Ward Officer</th>
+                        <th>Date</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for complaint in complaints %}
+                    <tr>
+                        <td>{{ complaint[0] }}</td>
+                        <td>{{ complaint[1] }}</td>
+                        <td><span class="pill">{{ complaint[2] }}</span></td>
+                        <td>{{ complaint[3] }}</td>
+                        <td>{{ complaint[4] or 'Unassigned' }}</td>
+                        <td>{{ complaint[5] or 'Unassigned' }}</td>
+                        <td>{{ complaint[6] }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</body>
+</html>

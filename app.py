@@ -1,5 +1,6 @@
 import logging
 import traceback
+from logging.handlers import RotatingFileHandler
 from fastapi import FastAPI, Request, Form, UploadFile, File
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse, Response
@@ -13,11 +14,27 @@ from database import initialize_all_databases, get_connection, get_database_name
 from waste_manager import get_collection_stats
 from ai_engine import get_ai_response
 from app_routes import router as advanced_router
+from datetime import datetime
 
 BASE_DIR = Path(__file__).resolve().parent
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(name)s %(message)s')
+LOG_DIR = BASE_DIR / "logs"
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+LOG_FILE = LOG_DIR / "app.log"
+
 logger = logging.getLogger("rcpi-waste-ai")
+logger.setLevel(getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO))
+logger.propagate = False
+
+if not logger.handlers:
+    formatter = logging.Formatter('%(asctime)s %(levelname)s %(name)s %(message)s')
+    stream_handler = logging.StreamHandler()
+    stream_handler.setFormatter(formatter)
+    logger.addHandler(stream_handler)
+
+    file_handler = RotatingFileHandler(LOG_FILE, maxBytes=2 * 1024 * 1024, backupCount=5)
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
 
 app = FastAPI(title="RCPI Waste AI")
 
@@ -174,6 +191,70 @@ async def complaints(request: Request):
     )
 
 
+@app.get("/complaint-tracking", response_class=HTMLResponse)
+async def complaint_tracking_page(request: Request):
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT complaint_id, name, status, priority, assigned_driver, assigned_ward_officer, created_date FROM complaints ORDER BY id DESC")
+        complaints = cursor.fetchall()
+        conn.close()
+    except Exception:
+        complaints = []
+    return templates.TemplateResponse(request, "complaint_tracking.html", {"request": request, "complaints": complaints})
+
+
+@app.get("/live-dashboard", response_class=HTMLResponse)
+async def live_dashboard(request: Request):
+    """Render a polished live operations dashboard for the platform."""
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT COUNT(*) FROM complaints WHERE status='Pending'")
+        pending_complaints = cursor.fetchone()[0] or 0
+
+        cursor.execute("SELECT COUNT(*) FROM complaints WHERE status='Resolved'")
+        resolved_complaints = cursor.fetchone()[0] or 0
+
+        cursor.execute("SELECT COUNT(*) FROM vehicles WHERE status='Active'")
+        active_vehicles = cursor.fetchone()[0] or 0
+
+        cursor.execute("SELECT COUNT(*) FROM wards")
+        total_wards = cursor.fetchone()[0] or 0
+
+        cursor.execute("SELECT SUM(waste_quantity) FROM waste_collection")
+        total_waste = cursor.fetchone()[0] or 0
+
+        conn.close()
+    except Exception:
+        pending_complaints = 0
+        resolved_complaints = 0
+        active_vehicles = 0
+        total_wards = 0
+        total_waste = 0
+
+    complaint_pct = min(100, max(0, round((pending_complaints / max(1, total_wards or 1)) * 100, 1)))
+    vehicle_pct = min(100, max(0, round((active_vehicles / max(1, total_wards or 1)) * 100, 1)))
+    ward_pct = min(100, max(0, round((total_wards / max(1, total_wards or 1)) * 100, 1)))
+
+    return templates.TemplateResponse(
+        request,
+        "live_dashboard.html",
+        {
+            "request": request,
+            "pending_complaints": pending_complaints,
+            "resolved_complaints": resolved_complaints,
+            "active_vehicles": active_vehicles,
+            "total_wards": total_wards,
+            "total_waste": int(total_waste) if total_waste is not None else 0,
+            "complaint_pct": complaint_pct,
+            "vehicle_pct": vehicle_pct,
+            "ward_pct": ward_pct,
+        },
+    )
+
+
 # ================= SAVE COMPLAINT =================
 
 @app.post("/complaints", response_class=HTMLResponse)
@@ -184,33 +265,41 @@ async def save_complaint(
     ward: str = Form(...),
     location: str = Form(...),
     waste_type: str = Form(...),
-    complaint: str = Form(...)
+    complaint: str = Form(...),
+    latitude: str = Form(None),
+    longitude: str = Form(None),
 ):
-
     conn = get_connection()
     cursor = conn.cursor()
 
+    complaint_id = f"CMP-{datetime.now().strftime('%Y%m%d%H%M%S')}"
     cursor.execute("""
         INSERT INTO complaints
-        (name,mobile,ward,location,waste_type,complaint,status)
-        VALUES (?,?,?,?,?,?,?)
+        (complaint_id,name,mobile,ward,location,waste_type,complaint,status,priority,gps_latitude,gps_longitude)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?)
     """, (
+        complaint_id,
         citizen_name,
         mobile,
         ward,
         location,
         waste_type,
         complaint,
-        "Pending"
+        "Pending",
+        "Medium",
+        float(latitude) if latitude else None,
+        float(longitude) if longitude else None,
     ))
 
+    complaint_row_id = cursor.lastrowid
     conn.commit()
     conn.close()
 
     return templates.TemplateResponse(request, "success.html",
         {
             "request": request,
-            "name": citizen_name
+            "name": citizen_name,
+            "complaint_id": complaint_id,
         }
     )
 
@@ -236,22 +325,47 @@ async def add_ward_submit(
     ward_name: str = Form(...),
     area: str = Form(...),
     email: str = Form(...),
-    address: str = Form(...)
+    address: str = Form(...),
+    supervisor: str = Form(None),
+    population: int = Form(0),
+    waste_generation_kg: float = Form(0),
+    vehicle_assignment: str = Form(None),
+    complaint_count: int = Form(0),
+    ward_id: int = Form(None),
 ):
     conn = get_connection()
     cursor = conn.cursor()
-    
-    cursor.execute("""
-        INSERT INTO wards (ward_name, area, email, address)
-        VALUES (?, ?, ?, ?)
-    """, (ward_name, area, email, address))
-    
+
+    if ward_id:
+        cursor.execute("""
+            UPDATE wards
+            SET ward_name = ?, area = ?, email = ?, address = ?, supervisor = ?, population = ?, waste_generation_kg = ?, vehicle_assignment = ?, complaint_count = ?
+            WHERE id = ?
+        """, (ward_name.strip(), area.strip(), email.strip(), address.strip(), (supervisor or "").strip(), population, waste_generation_kg, (vehicle_assignment or "").strip(), complaint_count, ward_id))
+    else:
+        if not ward_name.strip() or not area.strip() or not email.strip() or not address.strip():
+            conn.close()
+            return templates.TemplateResponse(request, "error.html", {"request": request, "error": "Ward name, area, email, and address are required."})
+        cursor.execute("""
+            INSERT INTO wards (ward_name, area, email, address, supervisor, population, waste_generation_kg, vehicle_assignment, complaint_count)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (ward_name.strip(), area.strip(), email.strip(), address.strip(), (supervisor or "").strip(), population, waste_generation_kg, (vehicle_assignment or "").strip(), complaint_count))
+
     conn.commit()
     conn.close()
-    
+
     return templates.TemplateResponse(request, "success.html",
         {"request": request, "name": f"Ward {ward_name}"}
     )
+
+@app.post("/wards/delete", response_class=HTMLResponse)
+async def delete_ward(request: Request, ward_id: int = Form(...)):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM wards WHERE id = ?", (ward_id,))
+    conn.commit()
+    conn.close()
+    return templates.TemplateResponse(request, "success.html", {"request": request, "name": "Ward deleted"})
 
 
 # ================= VEHICLES PAGE =================
@@ -276,22 +390,44 @@ async def add_vehicle_submit(
     vehicle_type: str = Form(...),
     capacity: int = Form(...),
     driver_name: str = Form(...),
-    ward_assigned: str = Form(...)
+    ward_assigned: str = Form(...),
+    route: str = Form(None),
+    status: str = Form('Active'),
+    vehicle_id: int = Form(None)
 ):
     conn = get_connection()
     cursor = conn.cursor()
-    
-    cursor.execute("""
-        INSERT INTO vehicles (vehicle_number, vehicle_type, capacity, driver_name, status, ward_assigned)
-        VALUES (?, ?, ?, ?, ?, ?)
-    """, (vehicle_number, vehicle_type, capacity, driver_name, 'Active', ward_assigned))
-    
+
+    if vehicle_id:
+        cursor.execute("""
+            UPDATE vehicles
+            SET vehicle_number = ?, vehicle_type = ?, capacity = ?, driver_name = ?, status = ?, ward_assigned = ?, route = ?
+            WHERE id = ?
+        """, (vehicle_number.strip(), vehicle_type.strip(), capacity, driver_name.strip(), status, ward_assigned.strip(), (route or "").strip(), vehicle_id))
+    else:
+        if not vehicle_number.strip() or not vehicle_type.strip() or not driver_name.strip() or not ward_assigned.strip():
+            conn.close()
+            return templates.TemplateResponse(request, "error.html", {"request": request, "error": "Vehicle number, type, driver, and ward assignment are required."})
+        cursor.execute("""
+            INSERT INTO vehicles (vehicle_number, vehicle_type, capacity, driver_name, status, ward_assigned, route)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (vehicle_number.strip(), vehicle_type.strip(), capacity, driver_name.strip(), status, ward_assigned.strip(), (route or "").strip()))
+
     conn.commit()
     conn.close()
-    
+
     return templates.TemplateResponse(request, "success.html",
         {"request": request, "name": f"Vehicle {vehicle_number}"}
     )
+
+@app.post("/vehicles/delete", response_class=HTMLResponse)
+async def delete_vehicle(request: Request, vehicle_id: int = Form(...)):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM vehicles WHERE id = ?", (vehicle_id,))
+    conn.commit()
+    conn.close()
+    return templates.TemplateResponse(request, "success.html", {"request": request, "name": "Vehicle deleted"})
 
 
 # ================= WASTE COLLECTION PAGE =================
@@ -333,6 +469,60 @@ async def add_collection_submit(
     return templates.TemplateResponse(request, "success.html",
         {"request": request, "name": "Waste Collection"}
     )
+
+
+# ================= ADMIN COMPLAINT MANAGEMENT =================
+
+@app.get("/admin-complaints", response_class=HTMLResponse)
+async def admin_complaints_page(request: Request):
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, complaint_id, name, ward, waste_type, status, priority, assigned_driver, assigned_ward_officer, created_date FROM complaints ORDER BY id DESC")
+        complaints = cursor.fetchall()
+        conn.close()
+    except Exception:
+        complaints = []
+
+    return templates.TemplateResponse(request, "admin_complaints.html", {"request": request, "complaints": complaints})
+
+
+@app.post("/admin-complaints", response_class=HTMLResponse)
+async def admin_complaints_update(
+    request: Request,
+    complaint_id: int = Form(...),
+    status: str = Form(None),
+    priority: str = Form(None),
+    remarks: str = Form(None),
+    assigned_driver: str = Form(None),
+    assigned_ward_officer: str = Form(None),
+):
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE complaints
+            SET status = ?, priority = ?, remarks = ?, assigned_driver = ?, assigned_ward_officer = ?, updated_date = ?
+            WHERE id = ?
+        """, (status or "Pending", priority or "Medium", remarks or "", assigned_driver or "", assigned_ward_officer or "", datetime.now().isoformat(), complaint_id))
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
+    return RedirectResponse(url="/admin-complaints", status_code=303)
+
+@app.post("/admin-complaints/delete", response_class=HTMLResponse)
+async def admin_complaints_delete(request: Request, complaint_id: int = Form(...)):
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM complaints WHERE id = ?", (complaint_id,))
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+    return RedirectResponse(url="/admin-complaints", status_code=303)
 
 
 # ================= AI SUPPORT PAGE =================
