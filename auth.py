@@ -8,7 +8,7 @@ import hashlib
 import secrets
 from datetime import datetime, timedelta
 from typing import Optional, Tuple
-from database import get_connection
+from database import get_connection, initialize_all_databases
 
 # Hash password with salt
 def hash_password(password: str) -> str:
@@ -62,6 +62,77 @@ class AuthManager:
                 )
             ''')
 
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS citizens (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER UNIQUE NOT NULL,
+                    citizen_id TEXT,
+                    address TEXT,
+                    ward TEXT,
+                    house_id TEXT,
+                    gps_location TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(user_id) REFERENCES users(id)
+                )
+            ''')
+
+            # Compatibility upgrade for older database files that may lack
+            # the expanded citizen profile columns used by registration and login.
+            cursor.execute("PRAGMA table_info(citizens)")
+            citizen_columns = {row[1] for row in cursor.fetchall()}
+            if 'citizen_id' not in citizen_columns or 'address' not in citizen_columns or 'ward' not in citizen_columns or 'house_id' not in citizen_columns or 'gps_location' not in citizen_columns or 'created_at' not in citizen_columns:
+                cursor.execute('SELECT name FROM sqlite_master WHERE type="table" AND name="citizens"')
+                if cursor.fetchone():
+                    cursor.execute('ALTER TABLE citizens RENAME TO citizens_old')
+                    cursor.execute('''
+                        CREATE TABLE citizens (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            user_id INTEGER UNIQUE NOT NULL,
+                            citizen_id TEXT,
+                            address TEXT,
+                            ward TEXT,
+                            house_id TEXT,
+                            gps_location TEXT,
+                            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                            FOREIGN KEY(user_id) REFERENCES users(id)
+                        )
+                    ''')
+                    cursor.execute("PRAGMA table_info(citizens_old)")
+                    old_columns = {row[1] for row in cursor.fetchall()}
+                    select_parts = ['id', 'user_id']
+                    if 'citizen_id' in old_columns:
+                        select_parts.append('citizen_id')
+                    else:
+                        select_parts.append("'RCPI-CIT-' || printf('%05d', user_id) AS citizen_id")
+                    if 'address' in old_columns:
+                        select_parts.append('address')
+                    else:
+                        select_parts.append("'' AS address")
+                    if 'ward' in old_columns:
+                        select_parts.append('ward')
+                    else:
+                        select_parts.append("'' AS ward")
+                    if 'house_id' in old_columns:
+                        select_parts.append('house_id')
+                    else:
+                        select_parts.append("'' AS house_id")
+                    if 'gps_location' in old_columns:
+                        select_parts.append('gps_location')
+                    else:
+                        select_parts.append("'' AS gps_location")
+                    if 'created_at' in old_columns:
+                        select_parts.append('created_at')
+                    else:
+                        select_parts.append("CURRENT_TIMESTAMP AS created_at")
+                    cursor.execute(
+                        f"""
+                        INSERT INTO citizens (id, user_id, citizen_id, address, ward, house_id, gps_location, created_at)
+                        SELECT {', '.join(select_parts)}
+                        FROM citizens_old
+                        """
+                    )
+                    cursor.execute('DROP TABLE citizens_old')
+
             # Sessions table
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS sessions (
@@ -97,29 +168,46 @@ class AuthManager:
                 )
             ''')
 
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS password_reset_tokens (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    token TEXT UNIQUE NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    expires_at TIMESTAMP,
+                    is_used INTEGER DEFAULT 0,
+                    used_at TIMESTAMP,
+                    FOREIGN KEY(user_id) REFERENCES users(id)
+                )
+            ''')
+
             conn.commit()
     
     def register_user(self, username: str, email: str, password: str, 
                      full_name: str, phone: str, role: str = 'citizen',
-                     address: str = None, ward: str = None) -> Tuple[bool, str]:
-        """Register new user"""
+                     address: str = None, ward: str = None,
+                     house_id: str = None, gps_location: str = None) -> Tuple[bool, str]:
+        """Register new user and create a citizen profile when needed."""
         try:
+            initialize_all_databases()
+            self.create_auth_tables()
             with self._get_connection() as conn:
                 cursor = conn.cursor()
-                
                 password_hash = hash_password(password)
-                
+
                 cursor.execute('''
                     INSERT INTO users (username, email, password_hash, role, full_name, phone)
                     VALUES (?, ?, ?, ?, ?, ?)
                 ''', (username, email, password_hash, role, full_name, phone))
 
                 user_id = cursor.lastrowid
+                citizen_id = None
                 if role == 'citizen':
+                    citizen_id = f"RCPI-CIT-{user_id:05d}"
                     cursor.execute('''
-                        INSERT INTO citizens (user_id, address, ward)
-                        VALUES (?, ?, ?)
-                    ''', (user_id, address or '', ward or ''))
+                        INSERT INTO citizens (user_id, citizen_id, address, ward, house_id, gps_location)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    ''', (user_id, citizen_id, address or '', ward or '', house_id or '', gps_location or ''))
                 elif role == 'staff':
                     cursor.execute('''
                         INSERT INTO staff (user_id, name, role, ward)
@@ -130,10 +218,26 @@ class AuthManager:
                         INSERT INTO drivers (user_id, name, vehicle_number, ward)
                         VALUES (?, ?, ?, ?)
                     ''', (user_id, full_name or username, '', ward or ''))
-                
+
                 conn.commit()
-                
-                return True, "User registered successfully"
+                self.log_activity(user_id, 'REGISTER', f'Registered {role} account')
+
+                if role == 'citizen' and citizen_id:
+                    try:
+                        from notifications import NotificationManager
+                        subject = 'Welcome to RCPI Waste AI'
+                        body = (
+                            f"Hello {full_name or username}, your citizen account is ready. "
+                            f"Citizen ID: {citizen_id} | Login ID: {username} | Password: {password}"
+                        )
+                        NotificationManager.send_email(user_id, email, subject, body)
+                        if phone:
+                            NotificationManager.send_sms(user_id, phone, f"RCPI Waste AI: Citizen ID {citizen_id}; Login ID {username}; Password {password}")
+                            NotificationManager.send_whatsapp(user_id, phone, f"RCPI Waste AI: Citizen ID {citizen_id}; Login ID {username}; Password {password}")
+                    except Exception:
+                        pass
+
+                return True, f"User registered successfully{' - Citizen ID ' + citizen_id if citizen_id else ''}"
         except sqlite3.IntegrityError as e:
             if 'username' in str(e):
                 return False, "Username already exists"
@@ -142,95 +246,198 @@ class AuthManager:
             return False, str(e)
         except Exception as e:
             return False, str(e)
-    
-    def authenticate_user(self, username: str, password: str) -> Tuple[bool, Optional[str], Optional[dict]]:
-        """Authenticate user and return session token"""
+
+    def get_user_by_identifier(self, identifier: str) -> Optional[dict]:
+        """Lookup a user by username, email, phone, or citizen id."""
         try:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
-                
-                # Allow login by username or email
                 cursor.execute('''
-                    SELECT id, password_hash, role, is_active FROM users 
-                    WHERE username = ? OR email = ?
-                ''', (username, username))
-                
+                    SELECT u.id, u.username, u.email, u.phone, u.full_name, u.role, c.citizen_id
+                    FROM users u
+                    LEFT JOIN citizens c ON c.user_id = u.id
+                    WHERE u.username = ? OR u.email = ? OR u.phone = ? OR c.citizen_id = ?
+                ''', (identifier, identifier, identifier, identifier))
+                row = cursor.fetchone()
+                if not row:
+                    return None
+                return {
+                    'id': row[0],
+                    'username': row[1],
+                    'email': row[2],
+                    'phone': row[3],
+                    'full_name': row[4],
+                    'role': row[5],
+                    'citizen_id': row[6],
+                }
+        except Exception:
+            return None
+
+    def create_password_reset_token(self, user_id: int) -> Tuple[bool, Optional[dict]]:
+        """Create a password reset token and return it with contact details."""
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute('SELECT email, phone FROM users WHERE id = ?', (user_id,))
+                row = cursor.fetchone()
+                if not row:
+                    return False, None
+                email, phone = row
+                token = secrets.token_hex(3).upper()
+                cursor.execute('DELETE FROM password_reset_tokens WHERE user_id = ?', (user_id,))
+                cursor.execute('''
+                    INSERT INTO password_reset_tokens (user_id, token, expires_at)
+                    VALUES (?, ?, ?)
+                ''', (user_id, token, datetime.now() + timedelta(minutes=15)))
+                conn.commit()
+                return True, {'token': token, 'email': email, 'phone': phone}
+        except Exception:
+            return False, None
+
+    def reset_password_with_token(self, token: str, new_password: str) -> bool:
+        """Reset a user password using a valid reset token."""
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute('''
+                    SELECT user_id, expires_at, is_used
+                    FROM password_reset_tokens
+                    WHERE token = ?
+                    ORDER BY created_at DESC
+                    LIMIT 1
+                ''', (token,))
+                row = cursor.fetchone()
+                if not row:
+                    return False
+                user_id, expires_at, is_used = row
+                if is_used:
+                    return False
+                try:
+                    expires_dt = expires_at if not isinstance(expires_at, str) else datetime.fromisoformat(expires_at)
+                except Exception:
+                    expires_dt = None
+                if expires_dt and expires_dt < datetime.now():
+                    return False
+                password_hash = hash_password(new_password)
+                cursor.execute('UPDATE users SET password_hash = ? WHERE id = ?', (password_hash, user_id))
+                cursor.execute('UPDATE password_reset_tokens SET is_used = 1, used_at = ? WHERE token = ?', (datetime.now(), token))
+                conn.commit()
+                self.log_activity(user_id, 'PASSWORD_RESET', 'Password reset via token')
+                return True
+        except Exception:
+            return False
+    
+    def authenticate_user(self, username: str, password: str) -> Tuple[bool, Optional[str], Optional[dict]]:
+        """Authenticate user and return session token."""
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+
+                cursor.execute('''
+                    SELECT u.id, u.username, u.email, u.phone, u.password_hash, u.role, u.is_active
+                    FROM users u
+                    LEFT JOIN citizens c ON c.user_id = u.id
+                    WHERE u.username = ? OR u.email = ? OR u.phone = ? OR c.citizen_id = ?
+                ''', (username, username, username, username))
+
                 result = cursor.fetchone()
-                
+
                 if not result:
                     return False, None, None
-                
-                user_id, pwd_hash, role, is_active = result
-                
+
+                user_id, db_username, email, phone, pwd_hash, role, is_active = result
+
                 if not is_active:
                     return False, None, None
-                
+
                 if not verify_password(password, pwd_hash):
                     return False, None, None
-                
-                # Create session
+
                 token = create_session_token()
                 expires_at = datetime.now() + timedelta(days=7)
-                
+
                 cursor.execute('''
                     INSERT INTO sessions (user_id, token, expires_at)
                     VALUES (?, ?, ?)
                 ''', (user_id, token, expires_at))
-                
-                # Update last login
+
                 cursor.execute('''
                     UPDATE users SET last_login = ? WHERE id = ?
                 ''', (datetime.now(), user_id))
-                
-                # Log activity
+
                 cursor.execute('''
                     INSERT INTO activity_log (user_id, action, details)
                     VALUES (?, ?, ?)
                 ''', (user_id, 'LOGIN', 'User logged in'))
-                
+
                 conn.commit()
-                
+
                 user_data = {
                     'user_id': user_id,
-                    'username': username,
-                    'role': role
+                    'username': db_username,
+                    'email': email,
+                    'phone': phone,
+                    'role': role,
                 }
 
                 if role == 'citizen':
-                    cursor.execute('SELECT address, ward FROM citizens WHERE user_id = ?', (user_id,))
+                    cursor.execute('SELECT citizen_id, address, ward, house_id, gps_location FROM citizens WHERE user_id = ?', (user_id,))
                     citizen_row = cursor.fetchone()
                     if citizen_row:
-                        user_data['address'] = citizen_row[0]
-                        user_data['ward'] = citizen_row[1]
-                
+                        user_data['citizen_id'] = citizen_row[0]
+                        user_data['address'] = citizen_row[1]
+                        user_data['ward'] = citizen_row[2]
+                        user_data['house_id'] = citizen_row[3]
+                        user_data['gps_location'] = citizen_row[4]
+
                 return True, token, user_data
-        
-        except Exception as e:
+
+        except Exception:
             return False, None, None
     
-    def get_all_users(self, role: str = None):
-        """Return all users or users filtered by role."""
+    def get_all_users(self, role: str = None, search: str = None):
+        """Return all users or users filtered by role and search text."""
         try:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
+                query = '''
+                    SELECT u.id, u.username, u.email, u.role, u.full_name, u.phone, u.is_active, u.created_at,
+                           c.citizen_id, c.address, c.ward, c.house_id, c.gps_location
+                    FROM users u
+                    LEFT JOIN citizens c ON c.user_id = u.id
+                '''
+                params = []
+                conditions = []
                 if role:
-                    cursor.execute('SELECT id, username, email, role, full_name, phone, is_active, created_at FROM users WHERE role = ? ORDER BY created_at DESC', (role,))
-                else:
-                    cursor.execute('SELECT id, username, email, role, full_name, phone, is_active, created_at FROM users ORDER BY created_at DESC')
+                    conditions.append('u.role = ?')
+                    params.append(role)
+                if search:
+                    conditions.append('(u.username LIKE ? OR u.email LIKE ? OR u.phone LIKE ? OR c.citizen_id LIKE ? OR c.ward LIKE ? OR c.house_id LIKE ?)')
+                    search_value = f'%{search}%'
+                    params.extend([search_value, search_value, search_value, search_value, search_value, search_value])
+                if conditions:
+                    query += ' WHERE ' + ' AND '.join(conditions)
+                query += ' ORDER BY u.created_at DESC'
+                cursor.execute(query, params)
                 rows = cursor.fetchall()
                 return [
-                {
-                    'id': row[0],
-                    'username': row[1],
-                    'email': row[2],
-                    'role': row[3],
-                    'full_name': row[4],
-                    'phone': row[5],
-                    'is_active': bool(row[6]),
-                    'created_at': row[7]
-                }
-                for row in rows
-            ]
+                    {
+                        'id': row[0],
+                        'username': row[1],
+                        'email': row[2],
+                        'role': row[3],
+                        'full_name': row[4],
+                        'phone': row[5],
+                        'is_active': bool(row[6]),
+                        'created_at': row[7],
+                        'citizen_id': row[8],
+                        'address': row[9],
+                        'ward': row[10],
+                        'house_id': row[11],
+                        'gps_location': row[12],
+                    }
+                    for row in rows
+                ]
         except Exception:
             return []
 
@@ -240,6 +447,18 @@ class AuthManager:
                 cursor = conn.cursor()
                 cursor.execute('UPDATE users SET is_active = ? WHERE id = ?', (1 if is_active else 0, user_id))
                 conn.commit()
+                return True
+        except Exception:
+            return False
+
+    def reset_user_password(self, user_id: int, new_password: str) -> bool:
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                password_hash = hash_password(new_password)
+                cursor.execute('UPDATE users SET password_hash = ? WHERE id = ?', (password_hash, user_id))
+                conn.commit()
+                self.log_activity(user_id, 'PASSWORD_RESET', 'Password reset by admin')
                 return True
         except Exception:
             return False
@@ -331,6 +550,7 @@ auth_manager.create_auth_tables()
 # Seed demo users if not present
 def seed_demo_users():
     try:
+        initialize_all_databases()
         with get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT id FROM users WHERE username = 'admin'")

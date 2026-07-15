@@ -3,14 +3,14 @@ import traceback
 from logging.handlers import RotatingFileHandler
 from fastapi import FastAPI, Request, Form, UploadFile, File
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse, Response, JSONResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
 from starlette.exceptions import HTTPException as StarletteHTTPException
 import os
 import sys
-from database import initialize_all_databases, get_connection, get_database_name, log_audit_event, create_backup_copy, restore_latest_backup
+from database import initialize_all_databases, get_connection, get_database_name
 from waste_manager import get_collection_stats
 from ai_engine import get_ai_response
 from app_routes import router as advanced_router
@@ -118,17 +118,7 @@ async def favicon():
 
 @app.get('/health')
 async def health():
-    return {'status': 'ok', 'service': 'rcpi-waste-ai', 'database': get_database_name()}
-
-@app.get('/api/health')
-async def api_health():
-    try:
-        conn = get_connection()
-        conn.execute('SELECT 1')
-        conn.close()
-        return {'status': 'ok', 'database': 'ready'}
-    except Exception as exc:
-        return {'status': 'error', 'message': str(exc)}
+    return {'status': 'ok'}
 
 
 @app.on_event("startup")
@@ -299,11 +289,10 @@ async def save_complaint(
 
     cursor.execute("""
         INSERT INTO complaints
-        (complaint_id,user_id,name,mobile,ward,location,waste_type,complaint,status,priority,gps_latitude,gps_longitude,image_path)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        (complaint_id,name,mobile,ward,location,waste_type,complaint,status,priority,gps_latitude,gps_longitude,image_path)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
     """, (
         complaint_id,
-        user_id,
         citizen_name,
         mobile,
         ward,
@@ -320,15 +309,6 @@ async def save_complaint(
     complaint_row_id = cursor.lastrowid
     conn.commit()
     conn.close()
-    log_audit_event('citizen', 'create', 'complaint', complaint_row_id, f"Complaint created: {complaint_id}")
-    try:
-        conn = get_connection()
-        cursor = conn.cursor()
-        cursor.execute("INSERT INTO complaint_history (complaint_id, status, remarks, changed_by) VALUES (?, ?, ?, ?)", (complaint_row_id, 'Pending', 'Complaint submitted', 'citizen'))
-        conn.commit()
-        conn.close()
-    except Exception:
-        pass
 
     return templates.TemplateResponse(request, "success.html",
         {
@@ -388,7 +368,6 @@ async def add_ward_submit(
 
     conn.commit()
     conn.close()
-    log_audit_event('admin', 'create_or_update', 'ward', ward_id or None, f"Ward handled: {ward_name}")
 
     return templates.TemplateResponse(request, "success.html",
         {"request": request, "name": f"Ward {ward_name}"}
@@ -401,7 +380,6 @@ async def delete_ward(request: Request, ward_id: int = Form(...)):
     cursor.execute("DELETE FROM wards WHERE id = ?", (ward_id,))
     conn.commit()
     conn.close()
-    log_audit_event('admin', 'delete', 'ward', ward_id, 'Ward deleted')
     return templates.TemplateResponse(request, "success.html", {"request": request, "name": "Ward deleted"})
 
 
@@ -452,7 +430,6 @@ async def add_vehicle_submit(
 
     conn.commit()
     conn.close()
-    log_audit_event('admin', 'create_or_update', 'vehicle', vehicle_id or None, f"Vehicle handled: {vehicle_number}")
 
     return templates.TemplateResponse(request, "success.html",
         {"request": request, "name": f"Vehicle {vehicle_number}"}
@@ -465,7 +442,6 @@ async def delete_vehicle(request: Request, vehicle_id: int = Form(...)):
     cursor.execute("DELETE FROM vehicles WHERE id = ?", (vehicle_id,))
     conn.commit()
     conn.close()
-    log_audit_event('admin', 'delete', 'vehicle', vehicle_id, 'Vehicle deleted')
     return templates.TemplateResponse(request, "success.html", {"request": request, "name": "Vehicle deleted"})
 
 
@@ -504,8 +480,7 @@ async def add_collection_submit(
     
     conn.commit()
     conn.close()
-    log_audit_event('admin', 'create', 'waste_collection', None, f"Waste collection recorded for {ward}")
-
+    
     return templates.TemplateResponse(request, "success.html",
         {"request": request, "name": "Waste Collection"}
     )
@@ -542,15 +517,11 @@ async def admin_complaints_update(
         cursor = conn.cursor()
         cursor.execute("""
             UPDATE complaints
-            SET status = ?, priority = ?, remarks = ?, assigned_driver = ?, assigned_ward_officer = ?, assigned_staff = ?, updated_date = ?
+            SET status = ?, priority = ?, remarks = ?, assigned_driver = ?, assigned_ward_officer = ?, updated_date = ?
             WHERE id = ?
-        """, (status or "Pending", priority or "Medium", remarks or "", assigned_driver or "", assigned_ward_officer or "", assigned_driver or "", datetime.now().isoformat(), complaint_id))
-        conn.commit()
-        cursor.execute("INSERT INTO complaint_history (complaint_id, status, remarks, changed_by) VALUES (?, ?, ?, ?)", (complaint_id, status or "Pending", remarks or "", 'admin'))
-        cursor.execute("INSERT INTO assignments (complaint_id, ward_officer_id, driver_id, staff_id, status) VALUES (?, ?, ?, ?, ?)", (complaint_id, None, None, None, status or 'assigned'))
+        """, (status or "Pending", priority or "Medium", remarks or "", assigned_driver or "", assigned_ward_officer or "", datetime.now().isoformat(), complaint_id))
         conn.commit()
         conn.close()
-        log_audit_event('admin', 'update', 'complaint', complaint_id, f"Status={status or 'Pending'}")
     except Exception:
         pass
 
@@ -564,131 +535,9 @@ async def admin_complaints_delete(request: Request, complaint_id: int = Form(...
         cursor.execute("DELETE FROM complaints WHERE id = ?", (complaint_id,))
         conn.commit()
         conn.close()
-        log_audit_event('admin', 'delete', 'complaint', complaint_id, 'Complaint deleted')
     except Exception:
         pass
     return RedirectResponse(url="/admin-complaints", status_code=303)
-
-
-# ================= OPERATIONAL API =================
-
-@app.get("/api/complaints")
-async def list_complaints_api(request: Request):
-    try:
-        search = (request.query_params.get("search") or "").strip()
-        limit = int(request.query_params.get("limit") or 10)
-        page = int(request.query_params.get("page") or 1)
-    except ValueError:
-        limit = 10
-        page = 1
-
-    limit = max(1, min(limit, 100))
-    page = max(1, page)
-    offset = (page - 1) * limit
-
-    conn = get_connection()
-    cursor = conn.cursor()
-
-    if search:
-        like = f"%{search}%"
-        cursor.execute(
-            """
-            SELECT id, complaint_id, name, ward, waste_type, status, priority, assigned_driver, assigned_ward_officer, created_date
-            FROM complaints
-            WHERE complaint_id LIKE ? OR name LIKE ? OR ward LIKE ? OR waste_type LIKE ? OR complaint LIKE ?
-            ORDER BY id DESC
-            LIMIT ? OFFSET ?
-            """,
-            (like, like, like, like, like, limit, offset),
-        )
-        cursor.execute(
-            """
-            SELECT COUNT(*) FROM complaints
-            WHERE complaint_id LIKE ? OR name LIKE ? OR ward LIKE ? OR waste_type LIKE ? OR complaint LIKE ?
-            """,
-            (like, like, like, like, like),
-        )
-    else:
-        cursor.execute(
-            """
-            SELECT id, complaint_id, name, ward, waste_type, status, priority, assigned_driver, assigned_ward_officer, created_date
-            FROM complaints
-            ORDER BY id DESC
-            LIMIT ? OFFSET ?
-            """,
-            (limit, offset),
-        )
-        cursor.execute("SELECT COUNT(*) FROM complaints")
-
-    rows = cursor.fetchall()
-    total = cursor.fetchone()[0] if cursor.description else 0
-    conn.close()
-
-    items = []
-    for row in rows:
-        if hasattr(row, "keys"):
-            item = dict(row)
-        else:
-            columns = [col[0] for col in cursor.description]
-            item = {key: value for key, value in zip(columns, row)}
-        item["created_date"] = item.get("created_date") or ""
-        items.append(item)
-
-    return JSONResponse({"items": items, "total": total, "page": page, "limit": limit})
-
-@app.post("/api/backup")
-async def create_backup_api():
-    created, backup_path = create_backup_copy()
-    return JSONResponse({"created": created, "backup_path": backup_path or ""})
-
-
-# ================= HOUSEHOLD & WARD DATA =================
-
-@app.get("/api/households")
-async def list_households_api():
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT id, house_id, citizen_name, mobile, address, ward, family_members FROM households")
-    rows = cursor.fetchall()
-    conn.close()
-    return JSONResponse({"items": [
-        {
-            "id": row[0],
-            "house_id": row[1],
-            "citizen_name": row[2],
-            "mobile": row[3],
-            "address": row[4],
-            "ward": row[5],
-            "family_members": row[6],
-        } for row in rows
-    ]})
-
-@app.post("/api/households")
-async def create_household_api(
-    house_id: str = Form(...),
-    citizen_name: str = Form(...),
-    mobile: str = Form(...),
-    address: str = Form(...),
-    ward: str = Form(...),
-    family_members: int = Form(1),
-):
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("INSERT INTO households (house_id, citizen_name, mobile, address, ward, family_members) VALUES (?, ?, ?, ?, ?, ?)", (house_id, citizen_name, mobile, address, ward, family_members))
-    conn.commit()
-    conn.close()
-    return JSONResponse({"created": True})
-
-@app.get("/api/wards/summary")
-async def ward_summary_api():
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT ward, COUNT(*) FROM households GROUP BY ward")
-    households = cursor.fetchall()
-    cursor.execute("SELECT ward, SUM(waste_quantity) FROM waste_collection GROUP BY ward")
-    waste = cursor.fetchall()
-    conn.close()
-    return JSONResponse({"households": [{"ward": row[0], "count": row[1]} for row in households], "waste": [{"ward": row[0], "quantity": row[1] or 0} for row in waste]})
 
 
 # ================= AI SUPPORT PAGE =================

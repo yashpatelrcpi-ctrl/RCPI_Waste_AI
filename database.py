@@ -323,10 +323,19 @@ def create_citizen_dashboard_tables():
         user_id INTEGER UNIQUE,
         address TEXT,
         ward TEXT,
+        house_id TEXT,
+        gps_location TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY(user_id) REFERENCES users(id)
     )
     """)
+
+    cursor.execute("PRAGMA table_info(citizens)")
+    citizen_columns = [row[1] for row in cursor.fetchall()]
+    if 'house_id' not in citizen_columns:
+        cursor.execute("ALTER TABLE citizens ADD COLUMN house_id TEXT")
+    if 'gps_location' not in citizen_columns:
+        cursor.execute("ALTER TABLE citizens ADD COLUMN gps_location TEXT")
     
     # Citizen waste history
     cursor.execute("""

@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Citizen Complaint History</title>
+    <style>
+        body { font-family: Arial, sans-serif; background: #f5f7fb; margin: 0; padding: 0; }
+        .container { max-width: 1000px; margin: 30px auto; padding: 20px; background: #fff; border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.08); }
+        h1 { margin-bottom: 10px; }
+        .card { margin-top: 20px; padding: 16px; background: #f9fafc; border-radius: 8px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+        th, td { padding: 10px 12px; border-bottom: 1px solid #e5e7eb; text-align: left; }
+        th { background: #eef2ff; }
+        a { color: #4f46e5; text-decoration: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Citizen Complaint History</h1>
+        <p><strong>Citizen:</strong> {{ citizen[2] or citizen[0] }}</p>
+        <p><strong>Email:</strong> {{ citizen[1] }}</p>
+        <p><strong>Phone:</strong> {{ citizen[3] }}</p>
+        <div class="card">
+            {% if complaints %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Complaint ID</th>
+                        <th>Status</th>
+                        <th>Waste Type</th>
+                        <th>Location</th>
+                        <th>Created</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for complaint in complaints %}
+                    <tr>
+                        <td>{{ complaint[0] }}</td>
+                        <td>{{ complaint[1] }}</td>
+                        <td>{{ complaint[2] }}</td>
+                        <td>{{ complaint[3] }}</td>
+                        <td>{{ complaint[4] }}</td>
+                        <td>{{ complaint[5] }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p>No complaint history found.</p>
+            {% endif %}
+        </div>
+        <p style="margin-top: 16px;"><a href="/admin-users">← Back to user management</a></p>
+    </div>
+</body>
+</html>

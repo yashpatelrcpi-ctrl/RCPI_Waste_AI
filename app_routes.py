@@ -67,6 +67,8 @@ async def citizen_register_submit(
     phone: str = Form(...),
     address: str = Form(None),
     ward: str = Form(None),
+    house_id: str = Form(None),
+    gps_location: str = Form(None),
 ):
     success, message = auth_manager.register_user(
         username=username,
@@ -77,9 +79,22 @@ async def citizen_register_submit(
         role='citizen',
         address=address,
         ward=ward,
+        house_id=house_id,
+        gps_location=gps_location,
     )
     if not success:
         return templates.TemplateResponse(request, "citizen_login.html", {"request": request, "error": message})
+
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM users WHERE username = ?", (username,))
+        user_id = cursor.fetchone()[0]
+        cursor.execute("UPDATE citizens SET house_id = ?, gps_location = ? WHERE user_id = ?", (house_id or '', gps_location or '', user_id))
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
 
     ok, token, user = auth_manager.authenticate_user(username, password)
     if not ok or not token or not user:
@@ -139,7 +154,13 @@ async def staff_login_submit(request: Request, username: str = Form(...), passwo
 @router.post("/citizen-login", response_class=HTMLResponse)
 async def citizen_login_submit(request: Request, username: str = Form(...), password: str = Form(...)):
     """Process citizen login form"""
-    ok, token, user = auth_manager.authenticate_user(username, password)
+    try:
+        ok, token, user = auth_manager.authenticate_user(username, password)
+    except Exception:
+        ok = False
+        token = None
+        user = None
+
     if not ok or not token or not user:
         return templates.TemplateResponse(request, "citizen_login.html", {"request": request, "error": "Invalid credentials"})
 
@@ -203,16 +224,16 @@ async def admin_dashboard(request: Request):
 
 
 @router.get("/admin-users", response_class=HTMLResponse)
-async def admin_users_page(request: Request, role: str = None):
-    """Admin user management page."""
+async def admin_users_page(request: Request, role: str = None, search: str = None):
+    """Admin user management page with citizen search."""
     token = request.cookies.get('session_token')
     ok, user = auth_manager.verify_session(token) if token else (False, None)
     if not ok or not user or user.get('role') != 'admin':
         return templates.TemplateResponse(request, "admin_login.html", {"request": request, "error": "Please login as admin"})
 
     query_role = None if role in (None, 'all', '') else role
-    users = auth_manager.get_all_users(query_role)
-    return templates.TemplateResponse(request, "admin_users.html", {"request": request, "users": users, "selected_role": role or "all"})
+    users = auth_manager.get_all_users(query_role, search=search)
+    return templates.TemplateResponse(request, "admin_users.html", {"request": request, "users": users, "selected_role": role or "all", "search": search or ""})
 
 
 @router.post("/admin-users", response_class=HTMLResponse)
@@ -254,6 +275,9 @@ async def admin_users_action(request: Request, user_id: int = Form(...), action:
     elif action == 'delete':
         auth_manager.delete_user(user_id)
         message = "User deleted successfully."
+    elif action == 'reset_password':
+        auth_manager.reset_user_password(user_id, 'RCPI@2026')
+        message = "Password reset completed."
     else:
         message = "Unknown action."
 
@@ -266,7 +290,6 @@ async def admin_users_action(request: Request, user_id: int = Form(...), action:
 @router.get("/citizen-dashboard", response_class=HTMLResponse)
 async def citizen_dashboard(request: Request):
     """Citizen dashboard with personal tracking"""
-    # Verify session token
     token = request.cookies.get('session_token')
     ok, user = auth_manager.verify_session(token) if token else (False, None)
     if not ok or not user:
@@ -274,17 +297,38 @@ async def citizen_dashboard(request: Request):
     if user.get('role') != 'citizen':
         return templates.TemplateResponse(request, "citizen_login.html", {"request": request, "error": "Citizen access required"})
 
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT id, complaint_id, status, waste_type, location, created_date FROM complaints WHERE user_id = ? ORDER BY id DESC", (user['user_id'],))
-    complaints = cursor.fetchall()
-    cursor.execute("SELECT SUM(waste_quantity) FROM waste_collection WHERE ward = (SELECT ward FROM citizens WHERE user_id = ?)", (user['user_id'],))
-    total_waste = cursor.fetchone()[0] or 0
-    cursor.execute("SELECT COUNT(*) FROM complaints WHERE user_id = ?", (user['user_id'],))
-    complaint_count = cursor.fetchone()[0] or 0
-    cursor.execute("SELECT COUNT(*) FROM complaints WHERE user_id = ? AND status = 'Resolved'", (user['user_id'],))
-    resolved_count = cursor.fetchone()[0] or 0
-    conn.close()
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT id, complaint_id, status, waste_type, location, created_date FROM complaints WHERE user_id = ? ORDER BY id DESC", (user['user_id'],))
+        complaints = cursor.fetchall()
+
+        try:
+            cursor.execute("SELECT SUM(waste_quantity) FROM waste_collection WHERE ward = (SELECT ward FROM citizens WHERE user_id = ?)", (user['user_id'],))
+            total_waste = cursor.fetchone()[0] or 0
+        except Exception:
+            total_waste = 0
+
+        cursor.execute("SELECT COUNT(*) FROM complaints WHERE user_id = ?", (user['user_id'],))
+        complaint_count = cursor.fetchone()[0] or 0
+
+        cursor.execute("SELECT COUNT(*) FROM complaints WHERE user_id = ? AND LOWER(status) = 'resolved'", (user['user_id'],))
+        resolved_count = cursor.fetchone()[0] or 0
+
+        cursor.execute("SELECT address, ward, house_id, gps_location FROM citizens WHERE user_id = ?", (user['user_id'],))
+        citizen_profile = cursor.fetchone() or (None, None, None, None)
+
+        cursor.execute("SELECT collection_date, waste_type, waste_quantity FROM citizen_waste_history WHERE user_id = ? ORDER BY collection_date DESC LIMIT 10", (user['user_id'],))
+        waste_history = cursor.fetchall()
+        conn.close()
+    except Exception:
+        complaints = []
+        total_waste = 0
+        complaint_count = 0
+        resolved_count = 0
+        citizen_profile = (None, None, None, None)
+        waste_history = []
 
     return templates.TemplateResponse(request, "citizen_dashboard.html", {
         "request": request,
@@ -293,6 +337,8 @@ async def citizen_dashboard(request: Request):
         "total_waste": int(total_waste),
         "complaint_count": complaint_count,
         "resolved_count": resolved_count,
+        "citizen_profile": citizen_profile,
+        "waste_history": waste_history,
     })
 
 
@@ -357,32 +403,111 @@ async def detect_waste(
 
 # ==================== REPORTS & EXPORT ====================
 
+@router.get("/forgot-password", response_class=HTMLResponse)
+async def forgot_password_page(request: Request):
+    return templates.TemplateResponse(request, "citizen_login.html", {"request": request, "forgot_password": True, "show_reset_form": False})
+
+
+@router.post("/forgot-password", response_class=HTMLResponse)
+async def forgot_password_submit(request: Request, username: str = Form(...)):
+    user = auth_manager.get_user_by_identifier(username)
+    if not user:
+        return templates.TemplateResponse(request, "citizen_login.html", {"request": request, "error": "No account found for that username or email.", "forgot_password": True, "show_reset_form": False})
+
+    success, payload = auth_manager.create_password_reset_token(user['id'])
+    if not success or not payload:
+        return templates.TemplateResponse(request, "citizen_login.html", {"request": request, "error": "Unable to generate reset code right now.", "forgot_password": True, "show_reset_form": False})
+
+    return templates.TemplateResponse(request, "citizen_login.html", {
+        "request": request,
+        "message": "A verification code has been generated for your account. Enter it below to reset your password.",
+        "forgot_password": True,
+        "show_reset_form": True,
+        "reset_token": payload['token'],
+    })
+
+
+@router.post("/reset-password", response_class=HTMLResponse)
+async def reset_password_submit(request: Request, token: str = Form(...), password: str = Form(...)):
+    if not token or not password:
+        return templates.TemplateResponse(request, "citizen_login.html", {"request": request, "error": "A reset code and new password are required.", "forgot_password": True, "show_reset_form": True})
+
+    if auth_manager.reset_password_with_token(token, password):
+        return templates.TemplateResponse(request, "citizen_login.html", {"request": request, "message": "Password reset successful. Please log in with your new password.", "forgot_password": False})
+
+    return templates.TemplateResponse(request, "citizen_login.html", {"request": request, "error": "Invalid or expired reset code.", "forgot_password": True, "show_reset_form": True})
+
+
+@router.get("/admin-citizen-complaints/{user_id}", response_class=HTMLResponse)
+async def admin_citizen_complaints(request: Request, user_id: int):
+    token = request.cookies.get('session_token')
+    ok, current_user = auth_manager.verify_session(token) if token else (False, None)
+    if not ok or not current_user or current_user.get('role') != 'admin':
+        return templates.TemplateResponse(request, "admin_login.html", {"request": request, "error": "Please login as admin"})
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT username, email, full_name, phone FROM users WHERE id = ?", (user_id,))
+    user_row = cursor.fetchone()
+    cursor.execute("SELECT id, complaint_id, status, waste_type, location, created_date FROM complaints WHERE user_id = ? ORDER BY id DESC", (user_id,))
+    complaints = cursor.fetchall()
+    conn.close()
+
+    return templates.TemplateResponse(request, "admin_citizen_history.html", {
+        "request": request,
+        "citizen": user_row,
+        "complaints": complaints,
+    })
+
+
 @router.get("/reports", response_class=HTMLResponse)
 async def reports_page(request: Request):
     """Reports page"""
     try:
         conn = get_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT SUM(waste_quantity) FROM waste_collection")
-        total_waste = cursor.fetchone()[0] or 0
 
-        cursor.execute("SELECT LOWER(status), COUNT(*) FROM complaints GROUP BY LOWER(status)")
-        complaint_stats = cursor.fetchall() or []
+        try:
+            cursor.execute("SELECT SUM(waste_quantity) FROM waste_collection")
+            total_waste = cursor.fetchone()[0] or 0
+        except Exception:
+            total_waste = 0
 
-        cursor.execute("SELECT waste_type, SUM(waste_quantity) FROM waste_collection GROUP BY waste_type")
-        waste_stats = cursor.fetchall() or []
+        try:
+            cursor.execute("SELECT LOWER(status), COUNT(*) FROM complaints GROUP BY LOWER(status)")
+            complaint_stats = cursor.fetchall() or []
+        except Exception:
+            complaint_stats = []
 
-        cursor.execute("SELECT COUNT(*) FROM households")
-        total_households = cursor.fetchone()[0] or 0
+        try:
+            cursor.execute("SELECT waste_type, SUM(waste_quantity) FROM waste_collection GROUP BY waste_type")
+            waste_stats = cursor.fetchall() or []
+        except Exception:
+            waste_stats = []
 
-        cursor.execute("SELECT COUNT(*) FROM users WHERE role IN ('driver','staff','supervisor')")
-        total_staff = cursor.fetchone()[0] or 0
+        try:
+            cursor.execute("SELECT COUNT(*) FROM households")
+            total_households = cursor.fetchone()[0] or 0
+        except Exception:
+            total_households = 0
 
-        cursor.execute("SELECT COUNT(*) FROM complaints WHERE status = 'Resolved' OR status = 'Closed'")
-        resolved_complaints = cursor.fetchone()[0] or 0
+        try:
+            cursor.execute("SELECT COUNT(*) FROM users WHERE role IN ('driver','staff','supervisor')")
+            total_staff = cursor.fetchone()[0] or 0
+        except Exception:
+            total_staff = 0
 
-        cursor.execute("SELECT COALESCE(SUM(waste_quantity),0) FROM waste_collection")
-        waste_collected = cursor.fetchone()[0] or 0
+        try:
+            cursor.execute("SELECT COUNT(*) FROM complaints WHERE LOWER(status) IN ('resolved','closed')")
+            resolved_complaints = cursor.fetchone()[0] or 0
+        except Exception:
+            resolved_complaints = 0
+
+        try:
+            cursor.execute("SELECT COALESCE(SUM(waste_quantity),0) FROM waste_collection")
+            waste_collected = cursor.fetchone()[0] or 0
+        except Exception:
+            waste_collected = 0
 
         conn.close()
 
@@ -913,6 +1038,59 @@ async def staff_dashboard(request: Request):
     complaints = cursor.fetchall()
     conn.close()
     return templates.TemplateResponse(request, 'admin_dashboard.html', {'request': request, 'user': user, 'complaints': complaints, 'total_complaints': len(complaints), 'pending_complaints': len(complaints), 'resolved_complaints': 0, 'active_vehicles': 0, 'total_wards': 0, 'total_waste': 0})
+
+
+@router.post('/staff-task-update', response_class=HTMLResponse)
+async def staff_task_update(
+    request: Request,
+    complaint_id: int = Form(...),
+    status: str = Form(...),
+    remarks: str = Form(None),
+):
+    ok, user = _verify_role(request, 'staff')
+    if not ok:
+        return templates.TemplateResponse(request, 'admin_login.html', {'request': request, 'error': 'Please login as staff'})
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE complaints SET status = ?, remarks = ?, updated_date = ? WHERE id = ?",
+        (status, remarks or '', datetime.now().isoformat(), complaint_id),
+    )
+    conn.commit()
+    conn.close()
+    return RedirectResponse(url='/staff-dashboard', status_code=303)
+
+
+@router.post('/staff-proof-upload', response_class=HTMLResponse)
+async def staff_proof_upload(
+    request: Request,
+    complaint_id: int = Form(...),
+    proof_note: str = Form(None),
+    proof_file: UploadFile = File(None),
+):
+    ok, user = _verify_role(request, 'staff')
+    if not ok:
+        return templates.TemplateResponse(request, 'admin_login.html', {'request': request, 'error': 'Please login as staff'})
+
+    proof_path = None
+    if proof_file is not None and getattr(proof_file, 'filename', None):
+        upload_dir = BASE_DIR / 'static' / 'uploads'
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        safe_name = f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{Path(proof_file.filename).name}"
+        file_path = upload_dir / safe_name
+        file_path.write_bytes(await proof_file.read())
+        proof_path = f'/static/uploads/{safe_name}'
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE complaints SET remarks = ?, image_path = ?, updated_date = ? WHERE id = ?",
+        ((proof_note or '') + (f' | Proof: {proof_path}' if proof_path else ''), proof_path, datetime.now().isoformat(), complaint_id),
+    )
+    conn.commit()
+    conn.close()
+    return RedirectResponse(url='/staff-dashboard', status_code=303)
 
 
 # ==================== ANALYTICS ====================

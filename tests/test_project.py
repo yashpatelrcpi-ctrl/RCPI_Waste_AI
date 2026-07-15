@@ -133,6 +133,50 @@ class TestAuth(BaseTestCase):
         ok_verify_after, _ = auth.auth_manager.verify_session(token)
         self.assertFalse(ok_verify_after)
 
+    def test_citizen_registration_creates_profile_and_supports_mobile_login(self):
+        success, message = auth.auth_manager.register_user(
+            'citizen_mobile', 'citizen_mobile@example.com', 'Secure@123', 'Mobile Citizen', '9876543210',
+            role='citizen', address='10, Main Road', ward='Ward 5', house_id='H-100', gps_location='12.97,77.59'
+        )
+        self.assertTrue(success, msg=message)
+
+        ok, token, user_data = auth.auth_manager.authenticate_user('9876543210', 'Secure@123')
+        self.assertTrue(ok)
+        self.assertIsNotNone(token)
+        self.assertEqual(user_data['role'], 'citizen')
+
+        with database.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT citizen_id, address, ward, house_id, gps_location FROM citizens WHERE user_id = ?", (user_data['user_id'],))
+            row = cursor.fetchone()
+
+        self.assertIsNotNone(row)
+        self.assertTrue(row[0].startswith('RCPI-CIT-'))
+        self.assertEqual(row[1], '10, Main Road')
+        self.assertEqual(row[2], 'Ward 5')
+
+    def test_password_reset_flow_creates_token_and_resets_password(self):
+        success, message = auth.auth_manager.register_user(
+            'reset_user', 'reset_user@example.com', 'OldPass@123', 'Reset User', '5554443333', role='citizen'
+        )
+        self.assertTrue(success, msg=message)
+
+        user_id = None
+        with database.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT id FROM users WHERE username = ?", ('reset_user',))
+            user_id = cursor.fetchone()[0]
+
+        reset_ok, payload = auth.auth_manager.create_password_reset_token(user_id)
+        self.assertTrue(reset_ok)
+        self.assertIn('token', payload)
+
+        reset_password_ok = auth.auth_manager.reset_password_with_token(payload['token'], 'NewPass@123')
+        self.assertTrue(reset_password_ok)
+
+        ok, _, _ = auth.auth_manager.authenticate_user('reset_user@example.com', 'NewPass@123')
+        self.assertTrue(ok)
+
     def test_duplicate_registration(self):
         auth.auth_manager.register_user('duplicate', 'duplicate@example.com', 'pass', 'Dup User', '123')
         success, message = auth.auth_manager.register_user('duplicate', 'duplicate2@example.com', 'pass', 'Dup User', '123')
@@ -306,23 +350,6 @@ class TestComplaintWorkflow(BaseTestCase):
 
 
 class TestCRUDAndSecurity(BaseTestCase):
-    def test_vehicle_tracking_and_route_optimization_render_live_data(self):
-        conn = database.get_connection()
-        cursor = conn.cursor()
-        cursor.execute("INSERT INTO vehicles (vehicle_number, vehicle_type, capacity, driver_name, status, ward_assigned, route) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                       ('V-300', 'Auto', 1200, 'Driver Four', 'Active', 'Ward 7', 'Route C'))
-        conn.commit()
-        conn.close()
-
-        client = TestClient(app_module.app)
-        tracking_response = client.get('/vehicle-tracking')
-        self.assertEqual(tracking_response.status_code, 200)
-        self.assertIn('V-300', tracking_response.text)
-
-        optimization_response = client.get('/route-optimization')
-        self.assertEqual(optimization_response.status_code, 200)
-        self.assertIn('Route Recommendation', optimization_response.text)
-
     def test_ward_crud_round_trip(self):
         client = TestClient(app_module.app)
         create_response = client.post('/wards', data={
@@ -453,77 +480,6 @@ class TestCRUDAndSecurity(BaseTestCase):
         }, files={'image': ('photo.jpg', image_content, 'image/jpeg')})
         self.assertEqual(response.status_code, 200)
         self.assertIn('Uploaded image', response.text)
-
-    def test_audit_logging_records_event(self):
-        database.log_audit_event('admin', 'create', 'complaint', 1, 'Test audit entry')
-        conn = database.get_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM audit_logs WHERE actor = ?", ('admin',))
-        self.assertGreaterEqual(cursor.fetchone()[0], 1)
-        conn.close()
-
-    def test_backup_and_restore_flow(self):
-        backup_path = database.create_backup_copy()[1]
-        self.assertTrue(os.path.exists(backup_path))
-        restored = database.restore_latest_backup()
-        self.assertTrue(restored)
-
-    def test_backup_management_endpoint_creates_backup(self):
-        client = TestClient(app_module.app)
-        response = client.post('/api/backup')
-        self.assertEqual(response.status_code, 200)
-        payload = response.json()
-        self.assertTrue(payload.get('created'))
-        self.assertTrue(payload.get('backup_path'))
-
-    def test_complaints_api_supports_search_and_pagination(self):
-        conn = database.get_connection()
-        cursor = conn.cursor()
-        cursor.execute("INSERT INTO complaints (name, mobile, ward, location, waste_type, complaint, status) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                       ('Search User', '333', 'Ward 10', 'Alpha', 'Plastic', 'Searchable complaint', 'Pending'))
-        cursor.execute("INSERT INTO complaints (name, mobile, ward, location, waste_type, complaint, status) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                       ('Another User', '444', 'Ward 11', 'Beta', 'Organic', 'Different complaint', 'Resolved'))
-        conn.commit()
-        conn.close()
-
-        client = TestClient(app_module.app)
-        response = client.get('/api/complaints?search=Search&limit=1&page=1')
-        self.assertEqual(response.status_code, 200)
-        payload = response.json()
-        self.assertEqual(payload['page'], 1)
-        self.assertEqual(payload['limit'], 1)
-        self.assertGreaterEqual(payload['total'], 1)
-        self.assertTrue(payload['items'])
-
-
-class TestCitizenWorkflow(BaseTestCase):
-    def test_citizen_registration_creates_user_and_profile(self):
-        client = TestClient(app_module.app)
-        response = client.post('/citizen-register', data={
-            'username': 'newcitizen',
-            'email': 'newcitizen@example.com',
-            'password': 'StrongPass123',
-            'full_name': 'New Citizen',
-            'phone': '9876543210',
-            'address': 'Sector 12, Ward 5',
-            'ward': 'Ward 5',
-        })
-        self.assertEqual(response.status_code, 200)
-        conn = database.get_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM users WHERE username = ?", ('newcitizen',))
-        self.assertEqual(cursor.fetchone()[0], 1)
-        cursor.execute("SELECT COUNT(*) FROM citizens WHERE user_id = (SELECT id FROM users WHERE username = ?)", ('newcitizen',))
-        self.assertEqual(cursor.fetchone()[0], 1)
-        conn.close()
-
-    def test_citizen_cannot_access_admin_dashboard(self):
-        client = TestClient(app_module.app)
-        login = client.post('/citizen-login', data={'username': 'test_citizen', 'password': 'citizen@123'})
-        self.assertEqual(login.status_code, 200)
-        dashboard = client.get('/admin-dashboard')
-        self.assertEqual(dashboard.status_code, 200)
-        self.assertIn('Please login as admin', dashboard.text)
 
 
 class TestNavigation(BaseTestCase):

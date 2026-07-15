@@ -365,6 +365,7 @@
                 <div class="tab" onclick="switchTab('waste')">♻️ Waste History</div>
                 <div class="tab" onclick="switchTab('report')">📈 My Report</div>
                 <div class="tab" onclick="switchTab('upload')">📸 Upload Image</div>
+                <div class="tab" onclick="switchTab('profile')">👤 Profile</div>
             </div>
             
             <!-- Complaints Tab -->
@@ -392,75 +393,58 @@
             
             <!-- Waste History Tab -->
             <div class="tab-content" id="waste-tab">
+                {% if waste_history %}
                 <table>
                     <thead>
                         <tr>
                             <th>Date</th>
                             <th>Type</th>
                             <th>Quantity</th>
-                            <th>CO2 Saved</th>
-                            <th>Credits</th>
+                            <th>Location</th>
                         </tr>
                     </thead>
                     <tbody>
+                        {% for entry in waste_history %}
                         <tr>
-                            <td>2024-07-13</td>
-                            <td>♻️ Recyclable</td>
-                            <td>12 kg</td>
-                            <td>18 kg</td>
-                            <td>0.018</td>
+                            <td>{{ entry[0] }}</td>
+                            <td>{{ entry[1] }}</td>
+                            <td>{{ entry[2] }} kg</td>
+                            <td>{{ entry[3] if entry|length > 3 else 'N/A' }}</td>
                         </tr>
-                        <tr>
-                            <td>2024-07-10</td>
-                            <td>🟢 Organic</td>
-                            <td>8 kg</td>
-                            <td>4 kg</td>
-                            <td>0.004</td>
-                        </tr>
-                        <tr>
-                            <td>2024-07-05</td>
-                            <td>📱 E-waste</td>
-                            <td>2 kg</td>
-                            <td>4 kg</td>
-                            <td>0.004</td>
-                        </tr>
-                        <tr>
-                            <td>2024-06-28</td>
-                            <td>♻️ Recyclable</td>
-                            <td>15 kg</td>
-                            <td>22.5 kg</td>
-                            <td>0.0225</td>
-                        </tr>
-                        <tr>
-                            <td>2024-06-20</td>
-                            <td>🟢 Organic</td>
-                            <td>8 kg</td>
-                            <td>4 kg</td>
-                            <td>0.004</td>
-                        </tr>
+                        {% endfor %}
                     </tbody>
                 </table>
+                {% else %}
+                <div class="complaint-item">
+                    <h4>No waste history yet</h4>
+                    <p>Your recorded waste pickups will appear here.</p>
+                </div>
+                {% endif %}
             </div>
             
             <!-- Report Tab -->
             <div class="tab-content" id="report-tab">
-                <div style="margin-bottom: 20px;">
-                    <button class="btn btn-success">📥 Download Monthly Report (PDF)</button>
-                    <button class="btn btn-success">📥 Download as Excel</button>
-                    <button class="btn btn-secondary">📧 Email Report</button>
-                </div>
-                
                 <div style="background: #f9f9f9; padding: 20px; border-radius: 5px;">
                     <h3>Your Monthly Report</h3>
-                    <p style="margin-top: 15px;"><strong>July 2024 Summary:</strong></p>
+                    <p style="margin-top: 15px;"><strong>Live Summary:</strong></p>
                     <ul style="margin-top: 10px;">
-                        <li>Total Waste Tracked: 45 kg</li>
-                        <li>Total CO2 Saved: 67.5 kg</li>
-                        <li>Carbon Credits Earned: 0.0675</li>
-                        <li>Primary Category: ♻️ Recyclable</li>
-                        <li>Contribution to Ward Goal: 8.5%</li>
-                        <li>Leaderboard Rank: #12 in Ward 3</li>
+                        <li>Total Waste Tracked: {{ total_waste }} kg</li>
+                        <li>Total Complaints Filed: {{ complaint_count }}</li>
+                        <li>Resolved Complaints: {{ resolved_count }}</li>
+                        <li>Estimated CO2 Saved: {{ resolved_count * 12 }} kg</li>
+                        <li>Carbon Credits Earned: {{ resolved_count * 0.4 }}</li>
                     </ul>
+                </div>
+            </div>
+
+            <!-- Profile Tab -->
+            <div class="tab-content" id="profile-tab">
+                <div style="background: #f9f9f9; padding: 20px; border-radius: 5px;">
+                    <h3>Citizen Profile</h3>
+                    <p><strong>Address:</strong> {{ citizen_profile[0] or 'Not provided' }}</p>
+                    <p><strong>Ward:</strong> {{ citizen_profile[1] or 'Not provided' }}</p>
+                    <p><strong>House / Property ID:</strong> {{ citizen_profile[2] or 'Not provided' }}</p>
+                    <p><strong>GPS Location:</strong> {{ citizen_profile[3] or 'Not provided' }}</p>
                 </div>
             </div>
             

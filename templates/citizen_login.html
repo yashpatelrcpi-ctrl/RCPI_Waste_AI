@@ -197,7 +197,14 @@
                 <p>Password: <strong>citizen@123</strong></p>
             </div>
             
+            {% if error %}
+            <div class="error-message show">{{ error }}</div>
+            {% else %}
             <div class="error-message" id="loginError"></div>
+            {% endif %}
+            {% if message %}
+            <div class="demo-info"><strong>✅</strong> {{ message }}</div>
+            {% endif %}
             
             <div class="form-group">
                 <label for="login-username">Username</label>
@@ -213,39 +220,86 @@
         </form>
         
         <!-- REGISTER FORM -->
-        <form class="register-form" onsubmit="handleRegister(event)">
+        <form class="register-form" method="POST" action="/citizen-register">
             <div class="error-message" id="registerError"></div>
             
             <div class="form-group">
                 <label for="reg-username">Username</label>
-                <input type="text" id="reg-username" placeholder="Choose a username" required>
+                <input type="text" id="reg-username" name="username" placeholder="Choose a username" required>
             </div>
             
             <div class="form-group">
                 <label for="reg-email">Email</label>
-                <input type="email" id="reg-email" placeholder="Your email address" required>
+                <input type="email" id="reg-email" name="email" placeholder="Your email address" required>
             </div>
             
             <div class="form-group">
                 <label for="reg-password">Password</label>
-                <input type="password" id="reg-password" placeholder="Create a password" required>
+                <input type="password" id="reg-password" name="password" placeholder="Create a password" required>
             </div>
             
             <div class="form-group">
                 <label for="reg-name">Full Name</label>
-                <input type="text" id="reg-name" placeholder="Your full name" required>
+                <input type="text" id="reg-name" name="full_name" placeholder="Your full name" required>
             </div>
             
             <div class="form-group">
                 <label for="reg-phone">Phone</label>
-                <input type="tel" id="reg-phone" placeholder="Your phone number" required>
+                <input type="tel" id="reg-phone" name="phone" placeholder="Your phone number" required>
+            </div>
+
+            <div class="form-group">
+                <label for="reg-address">Address</label>
+                <input type="text" id="reg-address" name="address" placeholder="House address" required>
+            </div>
+
+            <div class="form-group">
+                <label for="reg-ward">Ward Number</label>
+                <input type="text" id="reg-ward" name="ward" placeholder="Ward number" required>
+            </div>
+
+            <div class="form-group">
+                <label for="reg-house-id">House ID / Property ID</label>
+                <input type="text" id="reg-house-id" name="house_id" placeholder="House or property ID" required>
+            </div>
+
+            <div class="form-group">
+                <label for="reg-gps">GPS Location</label>
+                <input type="text" id="reg-gps" name="gps_location" placeholder="Latitude, Longitude" required>
             </div>
             
             <button type="submit" class="login-btn">✅ Register</button>
         </form>
         
+        {% if forgot_password %}
+        <form method="POST" action="/forgot-password" style="margin-top: 15px;">
+            <div class="form-group">
+                <label for="forgot-username">Username or Email</label>
+                <input type="text" id="forgot-username" name="username" placeholder="Enter your username or email" required>
+            </div>
+            <button type="submit" class="login-btn">🔐 Send Reset Code</button>
+        </form>
+        {% endif %}
+
+        {% if show_reset_form %}
+        <form method="POST" action="/reset-password" style="margin-top: 15px;">
+            <div class="form-group">
+                <label for="reset-token">Reset Code</label>
+                <input type="text" id="reset-token" name="token" value="{{ reset_token }}" required>
+            </div>
+            <div class="form-group">
+                <label for="reset-password">New Password</label>
+                <input type="password" id="reset-password" name="password" placeholder="Enter your new password" required>
+            </div>
+            <button type="submit" class="login-btn">🔄 Reset Password</button>
+        </form>
+        {% endif %}
+
         <div class="footer-links">
             <a href="/">← Back to Home</a>
+            {% if not forgot_password %}
+            <a href="/forgot-password">Forgot Password?</a>
+            {% endif %}
         </div>
         <div style="text-align:center; margin-top:16px; font-size:13px; color:#666;">Powered by RCPI India Private Limited</div>
     </div>
@@ -269,47 +323,6 @@
             }
         }
         
-        function handleLogin(event) {
-            event.preventDefault();
-            const username = document.getElementById('login-username').value;
-            const password = document.getElementById('login-password').value;
-            const errorDiv = document.getElementById('loginError');
-            
-            if (username === 'test_citizen' && password === 'citizen@123') {
-                localStorage.setItem('citizen_token', 'citizen_session_' + Date.now());
-                localStorage.setItem('user_role', 'citizen');
-                localStorage.setItem('username', username);
-                window.location.href = '/citizen-dashboard';
-            } else {
-                errorDiv.textContent = '❌ Invalid credentials. Try test_citizen / citizen@123';
-                errorDiv.classList.add('show');
-                setTimeout(() => {
-                    errorDiv.classList.remove('show');
-                }, 5000);
-            }
-        }
-        
-        function handleRegister(event) {
-            event.preventDefault();
-            const errorDiv = document.getElementById('registerError');
-            
-            const username = document.getElementById('reg-username').value;
-            const email = document.getElementById('reg-email').value;
-            
-            if (username.length < 3) {
-                errorDiv.textContent = '❌ Username must be at least 3 characters';
-                errorDiv.classList.add('show');
-                return;
-            }
-            
-            // Simulate registration
-            localStorage.setItem('citizen_token', 'citizen_session_' + Date.now());
-            localStorage.setItem('user_role', 'citizen');
-            localStorage.setItem('username', username);
-            
-            alert('✅ Registration successful! Welcome, ' + username);
-            window.location.href = '/citizen-dashboard';
-        }
     </script>
 </body>
 </html>
