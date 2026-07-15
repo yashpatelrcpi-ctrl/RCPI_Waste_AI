@@ -60,49 +60,67 @@ async def citizen_login_page(request: Request):
 @router.post("/citizen-register", response_class=HTMLResponse)
 async def citizen_register_submit(
     request: Request,
-    username: str = Form(...),
-    email: str = Form(...),
-    password: str = Form(...),
-    full_name: str = Form(...),
-    phone: str = Form(...),
+    username: str = Form(None),
+    email: str = Form(None),
+    password: str = Form(None),
+    full_name: str = Form(None),
+    phone: str = Form(None),
     address: str = Form(None),
     ward: str = Form(None),
     house_id: str = Form(None),
     gps_location: str = Form(None),
+    otp_id: int = Form(None),
+    otp_code: str = Form(None),
 ):
-    success, message = auth_manager.register_user(
+    if otp_id and otp_code:
+        ok, message, token, user = auth_manager.verify_registration_otp(otp_id, otp_code)
+        if not ok:
+            return templates.TemplateResponse(request, "citizen_login.html", {
+                "request": request,
+                "register_error": message,
+                "show_registration_verify_form": True,
+                "otp_id": otp_id,
+                "phone": None,
+                "show_register_form": False,
+            })
+
+        resp = RedirectResponse(url="/citizen-dashboard", status_code=303)
+        resp.set_cookie("session_token", token, httponly=True, max_age=7*24*3600)
+        return resp
+
+    if not (username and email and password and full_name and phone):
+        return templates.TemplateResponse(request, "citizen_login.html", {
+            "request": request,
+            "register_error": "All registration fields are required.",
+            "show_register_form": True,
+        })
+
+    success, payload = auth_manager.create_registration_otp(
         username=username,
         email=email,
         password=password,
         full_name=full_name,
         phone=phone,
-        role='citizen',
         address=address,
         ward=ward,
         house_id=house_id,
         gps_location=gps_location,
     )
     if not success:
-        return templates.TemplateResponse(request, "citizen_login.html", {"request": request, "error": message})
+        return templates.TemplateResponse(request, "citizen_login.html", {
+            "request": request,
+            "register_error": payload.get('error', 'Unable to start registration OTP.'),
+            "show_register_form": True,
+        })
 
-    try:
-        conn = get_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT id FROM users WHERE username = ?", (username,))
-        user_id = cursor.fetchone()[0]
-        cursor.execute("UPDATE citizens SET house_id = ?, gps_location = ? WHERE user_id = ?", (house_id or '', gps_location or '', user_id))
-        conn.commit()
-        conn.close()
-    except Exception:
-        pass
-
-    ok, token, user = auth_manager.authenticate_user(username, password)
-    if not ok or not token or not user:
-        return templates.TemplateResponse(request, "citizen_login.html", {"request": request, "error": "Registration succeeded; please log in"})
-
-    resp = RedirectResponse(url="/citizen-dashboard", status_code=303)
-    resp.set_cookie("session_token", token, httponly=True, max_age=7*24*3600)
-    return resp
+    return templates.TemplateResponse(request, "citizen_login.html", {
+        "request": request,
+        "message": f"An OTP has been sent to {phone}. Enter it below to complete registration.",
+        "show_registration_verify_form": True,
+        "otp_id": payload['otp_id'],
+        "phone": phone,
+        "show_register_form": False,
+    })
 
 
 # ---------------- Role-specific logins ----------------
@@ -420,10 +438,9 @@ async def forgot_password_submit(request: Request, username: str = Form(...)):
 
     return templates.TemplateResponse(request, "citizen_login.html", {
         "request": request,
-        "message": "A verification code has been generated for your account. Enter it below to reset your password.",
+        "message": "A verification code has been sent to your registered mobile number. Enter it below to reset your password.",
         "forgot_password": True,
         "show_reset_form": True,
-        "reset_token": payload['token'],
     })
 
 

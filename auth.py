@@ -6,9 +6,11 @@ Handles user authentication, role management, and sessions
 import sqlite3
 import hashlib
 import secrets
+import json
 from datetime import datetime, timedelta
 from typing import Optional, Tuple
 from database import get_connection, initialize_all_databases
+from notifications import NotificationManager
 
 # Hash password with salt
 def hash_password(password: str) -> str:
@@ -181,6 +183,19 @@ class AuthManager:
                 )
             ''')
 
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS otp_tokens (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    phone TEXT NOT NULL,
+                    token TEXT NOT NULL,
+                    purpose TEXT NOT NULL,
+                    data TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    expires_at TIMESTAMP,
+                    verified INTEGER DEFAULT 0
+                )
+            ''')
+
             conn.commit()
     
     def register_user(self, username: str, email: str, password: str, 
@@ -290,9 +305,120 @@ class AuthManager:
                     VALUES (?, ?, ?)
                 ''', (user_id, token, datetime.now() + timedelta(minutes=15)))
                 conn.commit()
+
+                try:
+                    if phone:
+                        NotificationManager.send_sms(user_id, phone, f"Your RCPI password reset code is {token}. Use it within 15 minutes.")
+                    if email:
+                        NotificationManager.send_email(user_id, email, 'RCPI Password Reset Code', f'Your password reset code is {token}.')
+                except Exception:
+                    pass
+
                 return True, {'token': token, 'email': email, 'phone': phone}
         except Exception:
             return False, None
+
+    def _generate_otp(self, digits: int = 6) -> str:
+        return ''.join(str(secrets.randbelow(10)) for _ in range(digits))
+
+    def _store_otp(self, phone: str, purpose: str, data: Optional[dict] = None) -> Optional[dict]:
+        try:
+            token = self._generate_otp()
+            expires_at = datetime.now() + timedelta(minutes=15)
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute('''
+                    INSERT INTO otp_tokens (phone, token, purpose, data, expires_at)
+                    VALUES (?, ?, ?, ?, ?)
+                ''', (phone, token, purpose, json.dumps(data) if data else None, expires_at))
+                otp_id = cursor.lastrowid
+                conn.commit()
+            return {'id': otp_id, 'token': token, 'phone': phone, 'expires_at': expires_at}
+        except Exception:
+            return None
+
+    def create_registration_otp(self, username: str, email: str, password: str, full_name: str, phone: str, address: str = None, ward: str = None, house_id: str = None, gps_location: str = None) -> Tuple[bool, Optional[dict]]:
+        try:
+            existing_user = self.get_user_by_identifier(username) or self.get_user_by_identifier(email) or self.get_user_by_identifier(phone)
+            if existing_user:
+                return False, {'error': 'A user with the same username, email, or phone already exists.'}
+
+            payload = {
+                'username': username,
+                'email': email,
+                'password': password,
+                'full_name': full_name,
+                'phone': phone,
+                'address': address or '',
+                'ward': ward or '',
+                'house_id': house_id or '',
+                'gps_location': gps_location or '',
+            }
+            otp_metadata = self._store_otp(phone, 'registration', payload)
+            if not otp_metadata:
+                return False, {'error': 'Unable to generate OTP at this time.'}
+
+            try:
+                NotificationManager.send_sms(0, phone, f"Your RCPI registration OTP is {otp_metadata['token']}. Use it within 15 minutes.")
+            except Exception:
+                pass
+
+            return True, {'otp_id': otp_metadata['id'], 'token': otp_metadata['token'], 'phone': phone}
+        except Exception:
+            return False, {'error': 'Failed to initiate registration OTP.'}
+
+    def verify_registration_otp(self, otp_id: int, token: str) -> Tuple[bool, str, Optional[str], Optional[dict]]:
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute('''
+                    SELECT id, token, data, expires_at, verified
+                    FROM otp_tokens
+                    WHERE id = ? AND purpose = 'registration'
+                    ORDER BY created_at DESC
+                    LIMIT 1
+                ''', (otp_id,))
+                row = cursor.fetchone()
+                if not row:
+                    return False, 'OTP record not found.', None, None
+                stored_id, stored_token, data, expires_at, verified = row
+                if verified:
+                    return False, 'OTP has already been used.', None, None
+                if stored_token != token:
+                    return False, 'Invalid OTP code.', None, None
+                try:
+                    expires_dt = expires_at if not isinstance(expires_at, str) else datetime.fromisoformat(expires_at)
+                except Exception:
+                    expires_dt = None
+                if expires_dt and expires_dt < datetime.now():
+                    return False, 'OTP has expired.', None, None
+
+                payload = json.loads(data or '{}')
+                success, message = self.register_user(
+                    payload.get('username'),
+                    payload.get('email'),
+                    payload.get('password'),
+                    payload.get('full_name'),
+                    payload.get('phone'),
+                    role='citizen',
+                    address=payload.get('address'),
+                    ward=payload.get('ward'),
+                    house_id=payload.get('house_id'),
+                    gps_location=payload.get('gps_location')
+                )
+                if not success:
+                    return False, message, None, None
+
+                cursor.execute('UPDATE otp_tokens SET verified = 1 WHERE id = ?', (stored_id,))
+                conn.commit()
+
+            ok, auth_token, user = self.authenticate_user(payload.get('username'), payload.get('password'))
+            if not ok:
+                return False, 'Registration completed, but automatic login failed.', None, None
+
+            return True, 'Registration verified successfully.', auth_token, user
+        except Exception:
+            return False, 'Unable to verify registration OTP.', None, None
 
     def reset_password_with_token(self, token: str, new_password: str) -> bool:
         """Reset a user password using a valid reset token."""

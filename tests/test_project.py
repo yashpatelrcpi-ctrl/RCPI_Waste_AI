@@ -169,6 +169,34 @@ class TestAuth(BaseTestCase):
         self.assertEqual(row[1], '10, Main Road')
         self.assertEqual(row[2], 'Ward 5')
 
+    def test_registration_otp_flow_creates_user_after_verification(self):
+        success, payload = auth.auth_manager.create_registration_otp(
+            username='otp_user',
+            email='otp_user@example.com',
+            password='OtpPass@123',
+            full_name='OTP User',
+            phone='8887776666',
+            address='123 OTP Street',
+            ward='Ward 7',
+            house_id='H-200',
+            gps_location='12.98,77.60'
+        )
+        self.assertTrue(success, msg=str(payload))
+        self.assertIn('otp_id', payload)
+        self.assertIn('token', payload)
+
+        ok, message, auth_token, user_data = auth.auth_manager.verify_registration_otp(payload['otp_id'], payload['token'])
+        self.assertTrue(ok, msg=message)
+        self.assertIsNotNone(auth_token)
+        self.assertEqual(user_data['role'], 'citizen')
+
+        with database.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT id, phone FROM users WHERE username = ?", ('otp_user',))
+            row = cursor.fetchone()
+        self.assertIsNotNone(row)
+        self.assertEqual(row[1], '8887776666')
+
     def test_password_reset_flow_creates_token_and_resets_password(self):
         success, message = auth.auth_manager.register_user(
             'reset_user', 'reset_user@example.com', 'OldPass@123', 'Reset User', '5554443333', role='citizen'

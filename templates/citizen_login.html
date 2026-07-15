@@ -190,7 +190,7 @@
         </div>
         
         <!-- LOGIN FORM -->
-        <form method="POST" class="login-form" action="/citizen-login">
+        <form method="POST" class="login-form {% if show_register_form or show_registration_verify_form %}hide{% endif %}" action="/citizen-login">
             <div class="demo-info">
                 <strong>📝 Demo Account:</strong><br>
                 <p>Username: <strong>test_citizen</strong></p>
@@ -220,8 +220,8 @@
         </form>
         
         <!-- REGISTER FORM -->
-        <form class="register-form" method="POST" action="/citizen-register">
-            <div class="error-message" id="registerError"></div>
+        <form class="register-form {% if show_register_form or show_registration_verify_form %}show{% endif %}" method="POST" action="/citizen-register" id="registerForm">
+            <div class="error-message show" id="registerError">{{ register_error or '' }}</div>
             
             <div class="form-group">
                 <label for="reg-username">Username</label>
@@ -270,6 +270,17 @@
             
             <button type="submit" class="login-btn">✅ Register</button>
         </form>
+
+        {% if show_registration_verify_form %}
+        <form method="POST" action="/citizen-register" style="margin-top: 15px;" id="registrationVerifyForm">
+            <input type="hidden" name="otp_id" value="{{ otp_id }}">
+            <div class="form-group">
+                <label for="verify-otp">Registration OTP</label>
+                <input type="text" id="verify-otp" name="otp_code" placeholder="Enter code sent to {{ phone }}" required>
+            </div>
+            <button type="submit" class="login-btn">✅ Verify Registration</button>
+        </form>
+        {% endif %}
         
         {% if forgot_password %}
         <form method="POST" action="/forgot-password" style="margin-top: 15px;">
