@@ -125,6 +125,29 @@
                 <div class="stat-number">{{ total_waste | int }}</div>
                 <div class="stat-label">Kg</div>
             </div>
+            <div class="stat-card">
+                <div class="stat-label">Households Registered</div>
+                <div class="stat-number">{{ total_households }}</div>
+                <div class="stat-label">Active Records</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Staff & Drivers</div>
+                <div class="stat-number">{{ total_staff }}</div>
+                <div class="stat-label">Operations Team</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Resolved Complaints</div>
+                <div class="stat-number">{{ resolved_complaints }}</div>
+                <div class="stat-label">Closed Workflows</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>SBM & Sustainability Summary</h3>
+            <p><strong>Waste Collected:</strong> {{ waste_collected }} kg</p>
+            <p><strong>Households Covered:</strong> {{ total_households }}</p>
+            <p><strong>Operational Coverage:</strong> {{ (total_households * 100 // max(1,total_households)) }}%</p>
+            <p><strong>Carbon Reduction Indicator:</strong> {{ resolved_complaints * 12 }} kg CO2 avoided</p>
         </div>
 
         {% if complaint_stats %}

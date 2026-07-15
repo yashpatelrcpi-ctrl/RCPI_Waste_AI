@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Household Management - RCPI Waste AI</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; background: #f5f7fb; }
+        .topbar { background: linear-gradient(135deg, #2563eb, #7c3aed); color: white; padding: 16px 24px; }
+        .container { max-width: 1200px; margin: 24px auto; padding: 0 16px; }
+        .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 8px 20px rgba(0,0,0,0.08); margin-bottom: 20px; }
+        form { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+        input, button { padding: 10px; border-radius: 8px; border: 1px solid #cbd5e1; }
+        button { background: #2563eb; color: white; cursor: pointer; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { padding: 10px; border-bottom: 1px solid #e5e7eb; text-align: left; }
+        th { background: #f8fafc; }
+    </style>
+</head>
+<body>
+    <nav class="topbar">
+        <h2>🏠 Household Management</h2>
+    </nav>
+    <div class="container">
+        <div class="card">
+            <h3>Add Household</h3>
+            <form method="post" action="/households">
+                <input name="house_id" placeholder="House ID" required>
+                <input name="citizen_name" placeholder="Citizen Name" required>
+                <input name="mobile" placeholder="Mobile" required>
+                <input name="address" placeholder="Address" required>
+                <input name="ward" placeholder="Ward" required>
+                <input name="family_members" type="number" placeholder="Family Members" value="1" required>
+                <button type="submit">Save Household</button>
+            </form>
+        </div>
+        <div class="card">
+            <h3>Registered Households</h3>
+            <table>
+                <thead>
+                    <tr><th>House ID</th><th>Citizen</th><th>Mobile</th><th>Address</th><th>Ward</th><th>Family Members</th></tr>
+                </thead>
+                <tbody>
+                    {% for household in households %}
+                    <tr>
+                        <td>{{ household[1] }}</td>
+                        <td>{{ household[2] }}</td>
+                        <td>{{ household[3] }}</td>
+                        <td>{{ household[4] }}</td>
+                        <td>{{ household[5] }}</td>
+                        <td>{{ household[6] }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</body>
+</html>

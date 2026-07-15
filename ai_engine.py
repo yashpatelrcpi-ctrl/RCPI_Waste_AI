@@ -11,6 +11,7 @@ from waste_category_trainer import (
     categorize_waste, get_category_info, get_disposal_instructions,
     get_identification_help, WASTE_CATEGORY_TRAINING_DATA
 )
+from functools import lru_cache
 
 class WasteAI:
     def __init__(self):
@@ -25,8 +26,12 @@ class WasteAI:
     def generate_response(self, query):
         """Generate comprehensive AI response based on user query"""
         query_lower = self._normalize_query(query)
-        
-        # Check for waste identification/categorization first for real-world item questions
+        if not query_lower:
+            return self._handle_general_query(query)
+
+        if self._contains_keywords(query_lower, ["image", "photo", "camera", "upload"]):
+            return self._handle_image_query(query)
+
         if self._contains_keywords(query_lower, ["what", "category", "type", "classify", "identify", "which bin", "where", "put", "throw", "recycle", "dispose", "bin", "bottle", "plastic", "glass", "metal", "paper", "phone", "computer"]):
             result = self._identify_waste_category(query)
             if result:
@@ -75,6 +80,9 @@ class WasteAI:
     def _contains_keywords(self, text, keywords):
         """Check if text contains any keywords"""
         return any(keyword in text for keyword in keywords)
+
+    def _handle_image_query(self, query):
+        return """Image-based waste detection is ready. Upload a photo and the app will classify the waste, recommend disposal, and indicate recycling options. For now, describe the item in the chat and I will provide a quick classification and guidance."""
     
     def _identify_waste_category(self, query):
         """Identify waste category from user query with detailed practical guidance."""
@@ -529,6 +537,7 @@ Please ask a specific question about any waste management topic!
 """
         return response
 
+@lru_cache(maxsize=256)
 def get_ai_response(query):
     """Main function to get AI response with a safe fallback."""
     try:

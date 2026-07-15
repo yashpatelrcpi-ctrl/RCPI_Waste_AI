@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Complaint Management</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; margin: 0; background: #f5f7fb; color: #14213d; }
+        .topbar { background: linear-gradient(135deg, #2563eb, #7c3aed); color: white; padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; }
+        .container { max-width: 1200px; margin: 24px auto; padding: 0 16px; }
+        .card { background: white; border-radius: 16px; padding: 20px; box-shadow: 0 10px 24px rgba(15,23,42,0.08); margin-bottom: 24px; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #e5e7eb; }
+        th { background: #f8fafc; }
+        form { display: grid; gap: 8px; }
+        input, select, textarea { padding: 8px; border-radius: 8px; border: 1px solid #cbd5e1; }
+        button { background: #2563eb; color: white; border: none; padding: 8px 12px; border-radius: 8px; cursor: pointer; }
+        .pill { display: inline-block; padding: 4px 8px; border-radius: 999px; font-size: 0.8rem; background: #dbeafe; color: #1d4ed8; }
+    </style>
+</head>
+<body>
+    <nav class="topbar">
+        <h2>🛠️ Complaint Operations Center</h2>
+        <a href="/admin-dashboard" style="color: white; text-decoration: none;">Back to Dashboard</a>
+    </nav>
+    <div class="container">
+        <div class="card">
+            <h3>Manage Complaints</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Complaint</th>
+                        <th>Ward</th>
+                        <th>Type</th>
+                        <th>Status</th>
+                        <th>Priority</th>
+                        <th>Driver</th>
+                        <th>Officer</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for complaint in complaints %}
+                    <tr>
+                        <td>{{ complaint[1] }}</td>
+                        <td>{{ complaint[2] }}<br><small>{{ complaint[3] }}</small></td>
+                        <td>{{ complaint[4] }}</td>
+                        <td>{{ complaint[5] }}</td>
+                        <td><span class="pill">{{ complaint[6] }}</span></td>
+                        <td>{{ complaint[7] }}</td>
+                        <td>{{ complaint[8] or 'Unassigned' }}</td>
+                        <td>{{ complaint[9] or 'Unassigned' }}</td>
+                        <td>
+                            <form method="post" action="/admin-complaints">
+                                <input type="hidden" name="complaint_id" value="{{ complaint[0] }}">
+                                <select name="status">
+                                    <option value="Pending">Pending</option>
+                                    <option value="Assigned">Assigned</option>
+                                    <option value="In Progress">In Progress</option>
+                                    <option value="Resolved">Resolved</option>
+                                    <option value="Closed">Closed</option>
+                                </select>
+                                <select name="priority">
+                                    <option value="Low">Low</option>
+                                    <option value="Medium" selected>Medium</option>
+                                    <option value="High">High</option>
+                                    <option value="Critical">Critical</option>
+                                </select>
+                                <input name="remarks" placeholder="Remarks" />
+                                <input name="assigned_driver" placeholder="Driver" />
+                                <input name="assigned_ward_officer" placeholder="Ward Officer" />
+                                <button type="submit">Save</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</body>
+</html>

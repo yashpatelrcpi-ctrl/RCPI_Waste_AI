@@ -313,7 +313,7 @@
     <nav class="navbar">
         <div class="navbar-brand">🗑️ RCPI Waste AI - Citizen Portal</div>
         <div class="navbar-links">
-            <span id="username">Welcome, Citizen</span>
+            <span id="username">Welcome, {{ user.username }}</span>
             <button onclick="handleLogout()">🚪 Logout</button>
         </div>
     </nav>
@@ -326,25 +326,25 @@
             <div class="stat-card">
                 <div class="stat-icon">📋</div>
                 <h3>My Complaints</h3>
-                <div class="stat-value">5</div>
+                <div class="stat-value">{{ complaint_count }}</div>
             </div>
             
             <div class="stat-card">
                 <div class="stat-icon">♻️</div>
                 <h3>Waste Tracked</h3>
-                <div class="stat-value">45 kg</div>
+                <div class="stat-value">{{ total_waste }} kg</div>
             </div>
             
             <div class="stat-card">
                 <div class="stat-icon">🌍</div>
                 <h3>CO2 Saved</h3>
-                <div class="stat-value">67.5 kg</div>
+                <div class="stat-value">{{ resolved_count * 12 }} kg</div>
             </div>
             
             <div class="stat-card">
                 <div class="stat-icon">💰</div>
                 <h3>Carbon Credits</h3>
-                <div class="stat-value">3.4</div>
+                <div class="stat-value">{{ resolved_count * 0.4 }}</div>
             </div>
         </div>
         
@@ -352,8 +352,8 @@
         <div class="carbon-card">
             <div style="font-size: 48px;">💎</div>
             <div class="carbon-label">Carbon Credits Earned</div>
-            <div class="carbon-value">3.4 Credits</div>
-            <div class="carbon-label">Estimated Value: $51.00 USD</div>
+            <div class="carbon-value">{{ resolved_count * 0.4 }} Credits</div>
+            <div class="carbon-label">Estimated Value: ${{ resolved_count * 6 }} USD</div>
         </div>
         
         <!-- Tabbed Content -->
@@ -370,32 +370,24 @@
             <!-- Complaints Tab -->
             <div class="tab-content active" id="complaints-tab">
                 <div style="margin-bottom: 20px;">
-                    <button class="btn btn-success" onclick="alert('File new complaint form opens')">+ File New Complaint</button>
+                    <a class="btn btn-success" href="/complaints">+ File New Complaint</a>
                 </div>
-                
-                <div class="complaint-item">
-                    <h4>#C001 - Mixed Waste Collection Issue</h4>
-                    <p><strong>Date:</strong> 2024-07-13</p>
-                    <p><strong>Location:</strong> Sector 5, Ward 3</p>
-                    <p>Waste collection truck did not arrive on scheduled date.</p>
-                    <span class="status-badge status-in-progress">In Progress</span>
-                </div>
-                
-                <div class="complaint-item">
-                    <h4>#C002 - E-waste Disposal Query</h4>
-                    <p><strong>Date:</strong> 2024-07-10</p>
-                    <p><strong>Location:</strong> Sector 2, Ward 1</p>
-                    <p>How to properly dispose of old laptop?</p>
-                    <span class="status-badge status-resolved">Resolved</span>
-                </div>
-                
-                <div class="complaint-item">
-                    <h4>#C003 - Organic Waste Bin Overflow</h4>
-                    <p><strong>Date:</strong> 2024-07-05</p>
-                    <p><strong>Location:</strong> Sector 4, Ward 2</p>
-                    <p>Green bin is overflowing with organic waste.</p>
-                    <span class="status-badge status-resolved">Resolved</span>
-                </div>
+                {% if complaints %}
+                    {% for complaint in complaints %}
+                    <div class="complaint-item">
+                        <h4>#{{ complaint[1] or complaint[0] }} - {{ complaint[3] }}</h4>
+                        <p><strong>Date:</strong> {{ complaint[5] or 'N/A' }}</p>
+                        <p><strong>Location:</strong> {{ complaint[4] }}</p>
+                        <p>{{ complaint[2] }}</p>
+                        <span class="status-badge status-{{ complaint[2]|lower|replace(' ', '-') }}">{{ complaint[2] }}</span>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="complaint-item">
+                        <h4>No complaints yet</h4>
+                        <p>Submit a new complaint to see updates here.</p>
+                    </div>
+                {% endif %}
             </div>
             
             <!-- Waste History Tab -->

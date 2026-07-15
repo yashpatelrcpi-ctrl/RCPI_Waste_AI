@@ -57,6 +57,39 @@ async def citizen_login_page(request: Request):
     return templates.TemplateResponse(request, "citizen_login.html", {"request": request})
 
 
+@router.post("/citizen-register", response_class=HTMLResponse)
+async def citizen_register_submit(
+    request: Request,
+    username: str = Form(...),
+    email: str = Form(...),
+    password: str = Form(...),
+    full_name: str = Form(...),
+    phone: str = Form(...),
+    address: str = Form(None),
+    ward: str = Form(None),
+):
+    success, message = auth_manager.register_user(
+        username=username,
+        email=email,
+        password=password,
+        full_name=full_name,
+        phone=phone,
+        role='citizen',
+        address=address,
+        ward=ward,
+    )
+    if not success:
+        return templates.TemplateResponse(request, "citizen_login.html", {"request": request, "error": message})
+
+    ok, token, user = auth_manager.authenticate_user(username, password)
+    if not ok or not token or not user:
+        return templates.TemplateResponse(request, "citizen_login.html", {"request": request, "error": "Registration succeeded; please log in"})
+
+    resp = RedirectResponse(url="/citizen-dashboard", status_code=303)
+    resp.set_cookie("session_token", token, httponly=True, max_age=7*24*3600)
+    return resp
+
+
 # ---------------- Role-specific logins ----------------
 @router.get('/supervisor-login', response_class=HTMLResponse)
 async def supervisor_login_page(request: Request):
@@ -238,8 +271,29 @@ async def citizen_dashboard(request: Request):
     ok, user = auth_manager.verify_session(token) if token else (False, None)
     if not ok or not user:
         return templates.TemplateResponse(request, "citizen_login.html", {"request": request, "error": "Please login"})
+    if user.get('role') != 'citizen':
+        return templates.TemplateResponse(request, "citizen_login.html", {"request": request, "error": "Citizen access required"})
 
-    return templates.TemplateResponse(request, "citizen_dashboard.html", {"request": request, "user": user})
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, complaint_id, status, waste_type, location, created_date FROM complaints WHERE user_id = ? ORDER BY id DESC", (user['user_id'],))
+    complaints = cursor.fetchall()
+    cursor.execute("SELECT SUM(waste_quantity) FROM waste_collection WHERE ward = (SELECT ward FROM citizens WHERE user_id = ?)", (user['user_id'],))
+    total_waste = cursor.fetchone()[0] or 0
+    cursor.execute("SELECT COUNT(*) FROM complaints WHERE user_id = ?", (user['user_id'],))
+    complaint_count = cursor.fetchone()[0] or 0
+    cursor.execute("SELECT COUNT(*) FROM complaints WHERE user_id = ? AND status = 'Resolved'", (user['user_id'],))
+    resolved_count = cursor.fetchone()[0] or 0
+    conn.close()
+
+    return templates.TemplateResponse(request, "citizen_dashboard.html", {
+        "request": request,
+        "user": user,
+        "complaints": complaints,
+        "total_waste": int(total_waste),
+        "complaint_count": complaint_count,
+        "resolved_count": resolved_count,
+    })
 
 
 @router.get("/logout", response_class=HTMLResponse)
@@ -317,18 +371,39 @@ async def reports_page(request: Request):
 
         cursor.execute("SELECT waste_type, SUM(waste_quantity) FROM waste_collection GROUP BY waste_type")
         waste_stats = cursor.fetchall() or []
+
+        cursor.execute("SELECT COUNT(*) FROM households")
+        total_households = cursor.fetchone()[0] or 0
+
+        cursor.execute("SELECT COUNT(*) FROM users WHERE role IN ('driver','staff','supervisor')")
+        total_staff = cursor.fetchone()[0] or 0
+
+        cursor.execute("SELECT COUNT(*) FROM complaints WHERE status = 'Resolved' OR status = 'Closed'")
+        resolved_complaints = cursor.fetchone()[0] or 0
+
+        cursor.execute("SELECT COALESCE(SUM(waste_quantity),0) FROM waste_collection")
+        waste_collected = cursor.fetchone()[0] or 0
+
         conn.close()
 
     except Exception:
         total_waste = 0
         complaint_stats = []
         waste_stats = []
+        total_households = 0
+        total_staff = 0
+        resolved_complaints = 0
+        waste_collected = 0
 
     return templates.TemplateResponse(request, "reports.html", {
         "request": request,
         "total_waste": int(total_waste),
         "complaint_stats": complaint_stats,
-        "waste_stats": waste_stats
+        "waste_stats": waste_stats,
+        "total_households": total_households,
+        "total_staff": total_staff,
+        "resolved_complaints": resolved_complaints,
+        "waste_collected": int(waste_collected),
     })
 
 
@@ -381,6 +456,36 @@ async def download_report(report_type: str, format: str = "pdf"):
 
 
 # ==================== ESG & ENVIRONMENTAL ====================
+
+@router.get("/households", response_class=HTMLResponse)
+async def households_page(request: Request):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, house_id, citizen_name, mobile, address, ward, family_members FROM households ORDER BY id DESC")
+    households = cursor.fetchall()
+    conn.close()
+    return templates.TemplateResponse(request, "households.html", {"request": request, "households": households})
+
+
+@router.post("/households", response_class=HTMLResponse)
+async def households_submit(request: Request, house_id: str = Form(...), citizen_name: str = Form(...), mobile: str = Form(...), address: str = Form(...), ward: str = Form(...), family_members: int = Form(1)):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO households (house_id, citizen_name, mobile, address, ward, family_members) VALUES (?, ?, ?, ?, ?, ?)", (house_id, citizen_name, mobile, address, ward, family_members))
+    conn.commit()
+    conn.close()
+    return RedirectResponse(url="/households", status_code=303)
+
+
+@router.get("/staff-management", response_class=HTMLResponse)
+async def staff_management_page(request: Request):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT u.username, u.full_name, u.role, s.ward FROM users u LEFT JOIN staff s ON s.user_id = u.id WHERE u.role IN ('staff','driver','supervisor') ORDER BY u.id DESC")
+    staff = cursor.fetchall()
+    conn.close()
+    return templates.TemplateResponse(request, "staff_management.html", {"request": request, "staff": staff})
+
 
 @router.get("/esg-report", response_class=HTMLResponse)
 async def esg_report_page(request: Request):
@@ -618,31 +723,47 @@ async def download_backup():
 # ==================== VEHICLE TRACKING & ROUTE OPTIMIZATION ====================
 @router.get('/vehicle-tracking', response_class=HTMLResponse)
 async def vehicle_tracking_page(request: Request):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT id, vehicle_number, status, ward_assigned, route, driver_name, daily_collection_kg FROM vehicles ORDER BY id')
+    vehicles = cursor.fetchall()
+    conn.close()
+
+    rows = []
+    for vehicle in vehicles:
+        rows.append({
+            'id': vehicle[0],
+            'vehicle_number': vehicle[1],
+            'status': vehicle[2] or 'Unknown',
+            'ward_assigned': vehicle[3] or 'Unassigned',
+            'route': vehicle[4] or 'Pending',
+            'driver_name': vehicle[5] or 'N/A',
+            'daily_collection_kg': vehicle[6] or 0,
+        })
+
     html = """
     <!doctype html>
     <html>
     <head>
     <title>Live Vehicle Tracking</title>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        table { border-collapse: collapse; width: 100%; margin-top: 12px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background: #f4f4f4; }
+        .status { font-weight: bold; }
+    </style>
     </head>
     <body>
     <h1>Live Vehicle Tracking</h1>
-    <div id="map" style="width:100%;height:600px"></div>
-    <script>
-    const map = L.map('map').setView([20.5937,78.9629],5);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
-    async function loadVehicles(){
-        const resp = await fetch('/api/vehicles');
-        const data = await resp.json();
-        data.vehicles.forEach(v=>{
-            L.marker([v.latitude || 20.5937, v.longitude || 78.9629]).addTo(map)
-            .bindPopup(`Vehicle ${v.vehicle_number} - ${v.status}`);
-        });
-    }
-    loadVehicles();
-    setInterval(loadVehicles, 10000);
-    </script>
+    <p>Operational overview from the vehicle database.</p>
+    <table>
+        <tr><th>Vehicle</th><th>Status</th><th>Ward</th><th>Route</th><th>Driver</th><th>Daily Collection (kg)</th></tr>
+    """
+    for row in rows:
+        html += f"<tr><td>{row['vehicle_number']}</td><td class='status'>{row['status']}</td><td>{row['ward_assigned']}</td><td>{row['route']}</td><td>{row['driver_name']}</td><td>{row['daily_collection_kg']}</td></tr>"
+    html += """
+    </table>
     </body></html>
     """
     return HTMLResponse(html)
@@ -663,7 +784,28 @@ async def api_vehicles():
 
 @router.get('/route-optimization', response_class=HTMLResponse)
 async def route_opt_page(request: Request):
-    html = '<html><body><h1>Route Optimization (placeholder)</h1><p>Integrate routing engine (OSRM / GraphHopper) here.</p></body></html>'
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT vehicle_number, ward_assigned, route, status FROM vehicles WHERE status = ? ORDER BY id', ('Active',))
+    active_vehicles = cursor.fetchall()
+    cursor.execute('SELECT COUNT(*) FROM wards')
+    ward_count = cursor.fetchone()[0] or 0
+    conn.close()
+
+    html = f"""
+    <html><body>
+    <h1>Route Recommendation</h1>
+    <p>Active vehicles: {len(active_vehicles)}</p>
+    <p>Registered wards: {ward_count}</p>
+    <ul>
+    """
+    for vehicle in active_vehicles:
+        html += f"<li>{vehicle[0]} -> {vehicle[1]} via {vehicle[2]}</li>"
+    html += """
+    </ul>
+    <p>Suggested action: prioritize wards with the highest complaint density and assign the nearest active vehicle.</p>
+    </body></html>
+    """
     return HTMLResponse(html)
 
 
@@ -732,7 +874,17 @@ async def supervisor_dashboard(request: Request):
     ok, user = _verify_role(request, 'supervisor')
     if not ok:
         return templates.TemplateResponse(request, 'supervisor_login.html' if Path('templates/supervisor_login.html').exists() else 'admin_login.html', {'request': request, 'error': 'Please login as supervisor'})
-    return templates.TemplateResponse(request, 'admin_dashboard.html', {'request': request, 'user': user})
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) FROM complaints WHERE status IN ('Assigned', 'In Progress', 'Verified')")
+    active = cursor.fetchone()[0] or 0
+    cursor.execute("SELECT COUNT(*) FROM complaints WHERE status = 'Resolved'")
+    resolved = cursor.fetchone()[0] or 0
+    cursor.execute("SELECT COUNT(*) FROM vehicles")
+    vehicles = cursor.fetchone()[0] or 0
+    conn.close()
+    return templates.TemplateResponse(request, 'admin_dashboard.html', {'request': request, 'user': user, 'total_complaints': active, 'pending_complaints': active, 'resolved_complaints': resolved, 'active_vehicles': vehicles, 'total_wards': 0, 'total_waste': 0})
 
 
 @router.get('/driver-dashboard', response_class=HTMLResponse)
@@ -740,7 +892,13 @@ async def driver_dashboard(request: Request):
     ok, user = _verify_role(request, 'driver')
     if not ok:
         return templates.TemplateResponse(request, 'admin_login.html', {'request': request, 'error': 'Please login as driver'})
-    return templates.TemplateResponse(request, 'admin_dashboard.html', {'request': request, 'user': user})
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, complaint_id, ward, waste_type, status FROM complaints WHERE assigned_driver = ? OR assigned_driver IS NULL ORDER BY id DESC LIMIT 10", (user.get('username') or '',))
+    complaints = cursor.fetchall()
+    conn.close()
+    return templates.TemplateResponse(request, 'admin_dashboard.html', {'request': request, 'user': user, 'complaints': complaints, 'total_complaints': len(complaints), 'pending_complaints': len(complaints), 'resolved_complaints': 0, 'active_vehicles': 0, 'total_wards': 0, 'total_waste': 0})
 
 
 @router.get('/staff-dashboard', response_class=HTMLResponse)
@@ -748,7 +906,13 @@ async def staff_dashboard(request: Request):
     ok, user = _verify_role(request, 'staff')
     if not ok:
         return templates.TemplateResponse(request, 'admin_login.html', {'request': request, 'error': 'Please login as staff'})
-    return templates.TemplateResponse(request, 'admin_dashboard.html', {'request': request, 'user': user})
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, complaint_id, ward, waste_type, status FROM complaints WHERE assigned_staff = ? OR assigned_driver = ? ORDER BY id DESC LIMIT 10", (user.get('username') or '', user.get('username') or ''))
+    complaints = cursor.fetchall()
+    conn.close()
+    return templates.TemplateResponse(request, 'admin_dashboard.html', {'request': request, 'user': user, 'complaints': complaints, 'total_complaints': len(complaints), 'pending_complaints': len(complaints), 'resolved_complaints': 0, 'active_vehicles': 0, 'total_wards': 0, 'total_waste': 0})
 
 
 # ==================== ANALYTICS ====================

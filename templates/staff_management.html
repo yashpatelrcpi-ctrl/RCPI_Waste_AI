@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Staff Management - RCPI Waste AI</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; background: #f5f7fb; }
+        .topbar { background: linear-gradient(135deg, #0f766e, #2563eb); color: white; padding: 16px 24px; }
+        .container { max-width: 1100px; margin: 24px auto; padding: 0 16px; }
+        .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 8px 20px rgba(0,0,0,0.08); }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { padding: 10px; border-bottom: 1px solid #e5e7eb; text-align: left; }
+        th { background: #f8fafc; }
+    </style>
+</head>
+<body>
+    <nav class="topbar">
+        <h2>👥 Staff & Driver Management</h2>
+    </nav>
+    <div class="container">
+        <div class="card">
+            <h3>Assigned Personnel</h3>
+            <table>
+                <thead>
+                    <tr><th>Username</th><th>Name</th><th>Role</th><th>Ward</th></tr>
+                </thead>
+                <tbody>
+                    {% for member in staff %}
+                    <tr>
+                        <td>{{ member[0] }}</td>
+                        <td>{{ member[1] or member[0] }}</td>
+                        <td>{{ member[2] }}</td>
+                        <td>{{ member[3] or 'Unassigned' }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</body>
+</html>

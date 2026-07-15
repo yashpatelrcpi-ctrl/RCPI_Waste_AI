@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Dashboard - RCPI Waste AI</title>
+    <style>
+        :root {
+            color-scheme: light;
+            --primary: #2563eb;
+            --primary-dark: #1d4ed8;
+            --accent: #14b8a6;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --bg: #f4f7fb;
+            --card: #ffffff;
+            --text: #0f172a;
+            --muted: #64748b;
+        }
+
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #eff6ff 0%, #f8fafc 100%);
+            color: var(--text);
+        }
+        .topbar {
+            background: linear-gradient(135deg, var(--primary) 0%, #7c3aed 100%);
+            color: white;
+            padding: 20px 28px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 8px 24px rgba(37, 99, 235, 0.2);
+        }
+        .topbar h1 { margin: 0; font-size: 1.4rem; }
+        .topbar a { color: white; text-decoration: none; font-weight: 600; }
+        .container { max-width: 1300px; margin: 0 auto; padding: 28px; }
+        .hero {
+            background: var(--card);
+            border-radius: 20px;
+            padding: 24px;
+            box-shadow: 0 12px 32px rgba(15, 23, 42, 0.08);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 20px;
+            margin-bottom: 24px;
+        }
+        .hero h2 { margin: 0 0 8px; font-size: 1.6rem; }
+        .hero p { margin: 0; color: var(--muted); max-width: 680px; }
+        .pill {
+            display: inline-block;
+            padding: 8px 12px;
+            border-radius: 999px;
+            background: #dbeafe;
+            color: var(--primary-dark);
+            font-size: 0.9rem;
+            font-weight: 700;
+        }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 24px; }
+        .card { background: var(--card); border-radius: 18px; padding: 18px; box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06); }
+        .card .label { color: var(--muted); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1px; }
+        .card .value { font-size: 2rem; font-weight: 800; margin-top: 8px; color: var(--text); }
+        .card .trend { margin-top: 8px; font-size: 0.9rem; color: var(--accent); font-weight: 600; }
+        .panel { background: var(--card); border-radius: 18px; padding: 20px; box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06); margin-bottom: 20px; }
+        .panel h3 { margin-top: 0; }
+        .bars { display: grid; gap: 12px; }
+        .bar-row { display: flex; align-items: center; gap: 10px; }
+        .bar-track { flex: 1; background: #e2e8f0; border-radius: 999px; overflow: hidden; height: 10px; }
+        .bar-fill { height: 100%; background: linear-gradient(90deg, var(--primary) 0%, var(--accent) 100%); border-radius: 999px; }
+        .actions { display: flex; flex-wrap: wrap; gap: 10px; }
+        .btn { text-decoration: none; padding: 10px 14px; border-radius: 999px; font-weight: 700; display: inline-block; }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-secondary { background: #e2e8f0; color: var(--text); }
+        @media (max-width: 768px) {
+            .hero { flex-direction: column; align-items: flex-start; }
+            .container { padding: 16px; }
+        }
+    </style>
+</head>
+<body>
+    <nav class="topbar">
+        <h1>🛰️ Live Operations Center</h1>
+        <a href="/">Back to Home</a>
+    </nav>
+
+    <div class="container">
+        <section class="hero">
+            <div>
+                <span class="pill">Live dashboard • real-time status</span>
+                <h2>Smart waste operations at a glance</h2>
+                <p>Monitor complaints, fleet readiness, ward coverage, and collection progress from a single modern control panel.</p>
+            </div>
+            <div class="actions">
+                <a class="btn btn-primary" href="/admin-dashboard">Open Admin Panel</a>
+                <a class="btn btn-secondary" href="/reports">View Reports</a>
+            </div>
+        </section>
+
+        <section class="grid">
+            <div class="card">
+                <div class="label">Active Vehicles</div>
+                <div class="value">{{ active_vehicles }}</div>
+                <div class="trend">Fleet ready for dispatch</div>
+            </div>
+            <div class="card">
+                <div class="label">Pending Complaints</div>
+                <div class="value">{{ pending_complaints }}</div>
+                <div class="trend">Needs attention</div>
+            </div>
+            <div class="card">
+                <div class="label">Total Wards</div>
+                <div class="value">{{ total_wards }}</div>
+                <div class="trend">Coverage zones tracked</div>
+            </div>
+            <div class="card">
+                <div class="label">Waste Collected</div>
+                <div class="value">{{ total_waste }} kg</div>
+                <div class="trend">Collection volume</div>
+            </div>
+        </section>
+
+        <section class="panel">
+            <h3>Operational readiness</h3>
+            <div class="bars">
+                <div class="bar-row"><strong style="min-width: 110px;">Complaints</strong><div class="bar-track"><div class="bar-fill" style="width: {{ complaint_pct }}%;"></div></div><span>{{ pending_complaints }} open</span></div>
+                <div class="bar-row"><strong style="min-width: 110px;">Fleet</strong><div class="bar-track"><div class="bar-fill" style="width: {{ vehicle_pct }}%;"></div></div><span>{{ active_vehicles }} active</span></div>
+                <div class="bar-row"><strong style="min-width: 110px;">Coverage</strong><div class="bar-track"><div class="bar-fill" style="width: {{ ward_pct }}%;"></div></div><span>{{ total_wards }} wards</span></div>
+            </div>
+        </section>
+    </div>
+</body>
+</html>

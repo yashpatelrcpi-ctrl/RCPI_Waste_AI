@@ -100,7 +100,8 @@ class AuthManager:
             conn.commit()
     
     def register_user(self, username: str, email: str, password: str, 
-                     full_name: str, phone: str, role: str = 'citizen') -> Tuple[bool, str]:
+                     full_name: str, phone: str, role: str = 'citizen',
+                     address: str = None, ward: str = None) -> Tuple[bool, str]:
         """Register new user"""
         try:
             with self._get_connection() as conn:
@@ -112,6 +113,23 @@ class AuthManager:
                     INSERT INTO users (username, email, password_hash, role, full_name, phone)
                     VALUES (?, ?, ?, ?, ?, ?)
                 ''', (username, email, password_hash, role, full_name, phone))
+
+                user_id = cursor.lastrowid
+                if role == 'citizen':
+                    cursor.execute('''
+                        INSERT INTO citizens (user_id, address, ward)
+                        VALUES (?, ?, ?)
+                    ''', (user_id, address or '', ward or ''))
+                elif role == 'staff':
+                    cursor.execute('''
+                        INSERT INTO staff (user_id, name, role, ward)
+                        VALUES (?, ?, ?, ?)
+                    ''', (user_id, full_name or username, 'staff', ward or ''))
+                elif role == 'driver':
+                    cursor.execute('''
+                        INSERT INTO drivers (user_id, name, vehicle_number, ward)
+                        VALUES (?, ?, ?, ?)
+                    ''', (user_id, full_name or username, '', ward or ''))
                 
                 conn.commit()
                 
@@ -177,6 +195,13 @@ class AuthManager:
                     'username': username,
                     'role': role
                 }
+
+                if role == 'citizen':
+                    cursor.execute('SELECT address, ward FROM citizens WHERE user_id = ?', (user_id,))
+                    citizen_row = cursor.fetchone()
+                    if citizen_row:
+                        user_data['address'] = citizen_row[0]
+                        user_data['ward'] = citizen_row[1]
                 
                 return True, token, user_data
         

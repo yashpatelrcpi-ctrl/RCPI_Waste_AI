@@ -27,7 +27,9 @@ RCPI Waste AI is a FastAPI-based smart waste management platform with AI-assiste
    - Build: `pip install -r requirements.txt`
    - Start: `python -m uvicorn app:app --host 0.0.0.0 --port $PORT`
 4. Set the environment variable `WASTE_DB_PATH=/tmp/waste_ai.db` for persistence.
-5. Confirm health at `/health`.
+5. Confirm health at `/health` and `/api/health`.
+6. Use `/api/backup` to create a database backup from the deployed service when needed.
+7. Use `/api/complaints?search=...&limit=10&page=1` to query complaint records from the API.
 
 ## Demo Accounts
 - Admin: admin / admin@123
@@ -39,3 +41,5 @@ RCPI Waste AI is a FastAPI-based smart waste management platform with AI-assiste
 ## Notes
 - The application writes logs to the logs/app.log file.
 - The SQLite database is initialized automatically on startup.
+- Audit events are recorded for complaint, ward, vehicle, and waste collection actions.
+- Backup files are stored under the backups folder in the deployed environment when created.
