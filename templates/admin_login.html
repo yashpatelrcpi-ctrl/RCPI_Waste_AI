@@ -134,6 +134,17 @@
         .footer-links a:hover {
             text-decoration: underline;
         }
+
+        @media (max-width: 480px) {
+            .login-container {
+                padding: 24px;
+                margin: 16px;
+            }
+
+            .logo {
+                font-size: 40px;
+            }
+        }
     </style>
 </head>
 <body>
@@ -150,8 +161,13 @@
             Password: <strong>admin@123</strong>
         </div>
         
+        {% if error %}
+        <div class="error-message show">{{ error }}</div>
+        {% else %}
+        <div class="error-message" id="errorMessage"></div>
+        {% endif %}
+
         <form method="POST" action="{{ form_action if form_action else '/admin-login' }}">
-            <div class="error-message" id="errorMessage"></div>
             
             <div class="form-group">
                 <label for="username">Username</label>

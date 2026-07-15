@@ -1,14 +1,11 @@
-import os
-import shutil
 import sqlite3
+import os
 from pathlib import Path
-from typing import Optional, Tuple
 
 BASE_DIR = Path(__file__).resolve().parent
 
-DATABASE_URL = os.getenv("DATABASE_URL") or os.getenv("POSTGRES_URL")
-
 DEFAULT_DB_PATH = os.getenv("WASTE_DB_PATH")
+_INITIALIZED_DB_PATHS = set()
 if DEFAULT_DB_PATH:
     DATABASE_NAME = DEFAULT_DB_PATH
 else:
@@ -42,28 +39,7 @@ def _ensure_database_directory(db_name: str):
             raise
 
 
-def _use_postgres() -> bool:
-    return bool(DATABASE_URL)
-
-
-def _id_column_definition() -> str:
-    return "SERIAL PRIMARY KEY" if _use_postgres() else "INTEGER PRIMARY KEY AUTOINCREMENT"
-
-
 def get_connection():
-    if _use_postgres():
-        try:
-            import psycopg2
-        except Exception:
-            print("psycopg2 not available; falling back to SQLite")
-            db_name = get_database_name()
-            _ensure_database_directory(db_name)
-            return sqlite3.connect(db_name, timeout=30, detect_types=sqlite3.PARSE_DECLTYPES)
-
-        conn = psycopg2.connect(DATABASE_URL)
-        conn.autocommit = False
-        return conn
-
     db_name = get_database_name()
     _ensure_database_directory(db_name)
     return sqlite3.connect(db_name, timeout=30, detect_types=sqlite3.PARSE_DECLTYPES)
@@ -85,7 +61,6 @@ def create_database():
     CREATE TABLE IF NOT EXISTS complaints(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         complaint_id TEXT UNIQUE,
-        user_id INTEGER,
         name TEXT NOT NULL,
         mobile TEXT,
         ward TEXT,
@@ -97,7 +72,6 @@ def create_database():
         remarks TEXT,
         assigned_driver TEXT,
         assigned_ward_officer TEXT,
-        assigned_staff TEXT,
         image_path TEXT,
         gps_latitude REAL,
         gps_longitude REAL,
@@ -113,7 +87,12 @@ def create_database():
 
 
 def migrate_old_complaints_schema():
-    """Migrate legacy complaints schema to the current schema."""
+    """Migrate legacy complaints schema to the current schema.
+
+    Older database files used a `citizen_name` field and may be missing
+    `status` and `created_date`. This performs safe schema migration if the
+    table already exists.
+    """
     conn = get_connection()
     cursor = conn.cursor()
 
@@ -142,27 +121,6 @@ def migrate_old_complaints_schema():
         if 'created_date' not in columns:
             cursor.execute("ALTER TABLE complaints ADD COLUMN created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
             print("Added missing complaints.created_date column")
-    except sqlite3.OperationalError:
-        pass
-
-    try:
-        if 'user_id' not in columns:
-            cursor.execute("ALTER TABLE complaints ADD COLUMN user_id INTEGER")
-            print("Added missing complaints.user_id column")
-    except sqlite3.OperationalError:
-        pass
-
-    try:
-        if 'assigned_staff' not in columns:
-            cursor.execute("ALTER TABLE complaints ADD COLUMN assigned_staff TEXT")
-            print("Added missing complaints.assigned_staff column")
-    except sqlite3.OperationalError:
-        pass
-
-    try:
-        if 'image_path' not in columns:
-            cursor.execute("ALTER TABLE complaints ADD COLUMN image_path TEXT")
-            print("Added missing complaints.image_path column")
     except sqlite3.OperationalError:
         pass
 
@@ -240,20 +198,6 @@ def create_waste_collection_database():
     )
     """)
 
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS households(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        house_id TEXT UNIQUE,
-        citizen_name TEXT,
-        mobile TEXT,
-        address TEXT,
-        ward TEXT,
-        family_members INTEGER DEFAULT 1,
-        gps TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )
-    """)
-
     conn.commit()
     conn.close()
 
@@ -316,26 +260,6 @@ def create_citizen_dashboard_tables():
     """Create citizen-specific dashboard tables"""
     conn = get_connection()
     cursor = conn.cursor()
-
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS citizens(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER UNIQUE,
-        address TEXT,
-        ward TEXT,
-        house_id TEXT,
-        gps_location TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY(user_id) REFERENCES users(id)
-    )
-    """)
-
-    cursor.execute("PRAGMA table_info(citizens)")
-    citizen_columns = [row[1] for row in cursor.fetchall()]
-    if 'house_id' not in citizen_columns:
-        cursor.execute("ALTER TABLE citizens ADD COLUMN house_id TEXT")
-    if 'gps_location' not in citizen_columns:
-        cursor.execute("ALTER TABLE citizens ADD COLUMN gps_location TEXT")
     
     # Citizen waste history
     cursor.execute("""
@@ -378,83 +302,50 @@ def create_citizen_dashboard_tables():
         FOREIGN KEY(ward_id) REFERENCES wards(id)
     )
     """)
-
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS complaint_history(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        complaint_id INTEGER,
-        status TEXT,
-        remarks TEXT,
-        changed_by TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY(complaint_id) REFERENCES complaints(id)
-    )
-    """)
-
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS staff(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER UNIQUE,
-        name TEXT,
-        role TEXT,
-        ward TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY(user_id) REFERENCES users(id)
-    )
-    """)
-
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS drivers(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER UNIQUE,
-        name TEXT,
-        vehicle_number TEXT,
-        ward TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY(user_id) REFERENCES users(id)
-    )
-    """)
-
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS assignments(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        complaint_id INTEGER,
-        ward_officer_id INTEGER,
-        driver_id INTEGER,
-        staff_id INTEGER,
-        assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        status TEXT DEFAULT 'assigned',
-        FOREIGN KEY(complaint_id) REFERENCES complaints(id)
-    )
-    """)
-
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS notifications(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER,
-        message TEXT,
-        is_read INTEGER DEFAULT 0,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY(user_id) REFERENCES users(id)
-    )
-    """)
-
+    
     conn.commit()
     conn.close()
     print("Citizen Dashboard Database Ready")
 
 
-def create_audit_log_table():
+def create_households_table():
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute(f"""
-    CREATE TABLE IF NOT EXISTS audit_logs (
-        id {_id_column_definition()},
-        actor TEXT NOT NULL,
-        action TEXT NOT NULL,
-        target_type TEXT,
-        target_id INTEGER,
-        details TEXT,
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS households(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        house_id TEXT UNIQUE,
+        citizen_name TEXT,
+        mobile TEXT,
+        address TEXT,
+        ward TEXT,
+        family_members INTEGER DEFAULT 1
+    )
+    """)
+    conn.commit()
+    conn.close()
+
+
+def create_staff_and_driver_tables():
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS staff(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER UNIQUE NOT NULL,
+        name TEXT,
+        role TEXT DEFAULT 'staff',
+        ward TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS drivers(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER UNIQUE NOT NULL,
+        name TEXT,
+        vehicle_number TEXT,
+        ward TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
     """)
@@ -462,51 +353,12 @@ def create_audit_log_table():
     conn.close()
 
 
-def log_audit_event(actor: str, action: str, target_type: Optional[str] = None,
-                    target_id: Optional[int] = None, details: Optional[str] = None) -> bool:
-    try:
-        create_audit_log_table()
-        conn = get_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            "INSERT INTO audit_logs (actor, action, target_type, target_id, details) VALUES (?, ?, ?, ?, ?)",
-            (actor, action, target_type, target_id, details or "")
-        )
-        conn.commit()
-        conn.close()
-        return True
-    except Exception:
-        return False
-
-
-def create_backup_copy() -> Tuple[bool, str]:
-    backup_dir = BASE_DIR / "backups"
-    backup_dir.mkdir(parents=True, exist_ok=True)
-    db_name = get_database_name()
-    if not os.path.exists(db_name):
-        return False, ""
-
-    backup_path = backup_dir / f"{Path(db_name).stem}_{os.getpid()}_backup.bak"
-    shutil.copy2(db_name, backup_path)
-    return True, str(backup_path)
-
-
-def restore_latest_backup() -> bool:
-    backup_dir = BASE_DIR / "backups"
-    if not backup_dir.exists():
-        return False
-
-    backup_files = sorted(backup_dir.glob("*.bak"), key=lambda p: p.stat().st_mtime, reverse=True)
-    if not backup_files:
-        return False
-
-    target_db = get_database_name()
-    shutil.copy2(backup_files[0], target_db)
-    return os.path.exists(target_db)
-
-
 def initialize_all_databases():
-    """Initialize all database tables"""
+    """Initialize all database tables once per database path."""
+    db_name = get_database_name()
+    if db_name in _INITIALIZED_DB_PATHS:
+        return
+
     create_database()
     create_ward_database()
     create_vehicle_database()
@@ -514,5 +366,7 @@ def initialize_all_databases():
     migrate_old_complaints_schema()
     create_tracking_database()
     create_citizen_dashboard_tables()
-    create_audit_log_table()
+    create_households_table()
+    create_staff_and_driver_tables()
+    _INITIALIZED_DB_PATHS.add(db_name)
     print("All databases initialized successfully!")

@@ -315,6 +315,7 @@ async def save_complaint(
             "request": request,
             "name": citizen_name,
             "complaint_id": complaint_id,
+            "message": "Complaint submitted successfully. Your case reference has been created.",
         }
     )
 
@@ -432,7 +433,7 @@ async def add_vehicle_submit(
     conn.close()
 
     return templates.TemplateResponse(request, "success.html",
-        {"request": request, "name": f"Vehicle {vehicle_number}"}
+        {"request": request, "name": f"Vehicle {vehicle_number}", "message": "Vehicle record saved successfully."}
     )
 
 @app.post("/vehicles/delete", response_class=HTMLResponse)
@@ -482,7 +483,7 @@ async def add_collection_submit(
     conn.close()
     
     return templates.TemplateResponse(request, "success.html",
-        {"request": request, "name": "Waste Collection"}
+        {"request": request, "name": "Waste Collection", "message": "Waste collection entry recorded successfully."}
     )
 
 

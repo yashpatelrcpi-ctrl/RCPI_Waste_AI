@@ -183,6 +183,20 @@ class TestAuth(BaseTestCase):
         self.assertFalse(success)
         self.assertIn('already exists', message.lower())
 
+    def test_staff_registration_creates_profile_without_database_error(self):
+        success, message = auth.auth_manager.register_user(
+            'staff_user', 'staff_user@example.com', 'Staff@123', 'Staff Member', '7776665555', role='staff', ward='Ward 7'
+        )
+        self.assertTrue(success, msg=message)
+
+        with database.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT user_id, name, ward FROM staff WHERE name = ?", ('Staff Member',))
+            row = cursor.fetchone()
+
+        self.assertIsNotNone(row)
+        self.assertEqual(row[2], 'Ward 7')
+
 
 class TestWasteCategoryTrainer(BaseTestCase):
     def test_categorize_waste(self):
