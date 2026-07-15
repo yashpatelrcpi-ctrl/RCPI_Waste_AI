@@ -42,6 +42,7 @@ import reports
 import image_handler
 import carbon_prediction
 import notifications
+import bulk_test_data
 
 # Redirect the project database constant to the isolated test file
 database.DATABASE_NAME = TEST_DB_PATH
@@ -111,6 +112,19 @@ class TestDatabase(BaseTestCase):
 
         stats = waste_category_trainer.get_collection_stats() if hasattr(waste_category_trainer, 'get_collection_stats') else None
         self.assertIsNone(stats)
+
+
+class TestBulkDataGenerator(BaseTestCase):
+    def test_run_bulk_test_data_populates_expected_records(self):
+        result = bulk_test_data.run_bulk_test_data()
+
+        self.assertEqual(result['citizens'], 1000)
+        self.assertEqual(result['households'], 1000)
+        self.assertEqual(result['complaints'], 1000)
+        self.assertEqual(result['wards'], 50)
+        self.assertEqual(result['vehicles'], 100)
+        self.assertEqual(result['staff_drivers'], 200)
+        self.assertEqual(result['waste_collections'], 10000)
 
 
 class TestAuth(BaseTestCase):

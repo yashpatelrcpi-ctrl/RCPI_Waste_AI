@@ -61,6 +61,7 @@ def create_database():
     CREATE TABLE IF NOT EXISTS complaints(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         complaint_id TEXT UNIQUE,
+        user_id INTEGER,
         name TEXT NOT NULL,
         mobile TEXT,
         ward TEXT,
@@ -72,6 +73,8 @@ def create_database():
         remarks TEXT,
         assigned_driver TEXT,
         assigned_ward_officer TEXT,
+        assigned_staff TEXT,
+        assigned_vehicle TEXT,
         image_path TEXT,
         gps_latitude REAL,
         gps_longitude REAL,
@@ -124,6 +127,28 @@ def migrate_old_complaints_schema():
     except sqlite3.OperationalError:
         pass
 
+    for column_name, ddl in [
+        ('user_id', 'INTEGER'),
+        ('assigned_staff', 'TEXT'),
+        ('assigned_vehicle', 'TEXT'),
+        ('assigned_driver', 'TEXT'),
+        ('assigned_ward_officer', 'TEXT'),
+        ('priority', 'TEXT DEFAULT "Medium"'),
+        ('remarks', 'TEXT'),
+        ('location', 'TEXT'),
+        ('waste_type', 'TEXT'),
+        ('complaint', 'TEXT'),
+        ('gps_latitude', 'REAL'),
+        ('gps_longitude', 'REAL'),
+        ('updated_date', 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP'),
+    ]:
+        try:
+            if column_name not in columns:
+                cursor.execute(f"ALTER TABLE complaints ADD COLUMN {column_name} {ddl}")
+                print(f"Added missing complaints.{column_name} column")
+        except sqlite3.OperationalError:
+            pass
+
     conn.commit()
     conn.close()
 
@@ -132,8 +157,6 @@ def create_ward_database():
     conn = get_connection()
     cursor = conn.cursor()
 
-    cursor.execute("DROP TABLE IF EXISTS wards")
-    
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS wards(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -175,6 +198,20 @@ def create_vehicle_database():
     )
     """)
 
+    cursor.execute("PRAGMA table_info(vehicles)")
+    columns = {row[1] for row in cursor.fetchall()}
+    for column_name, ddl in [
+        ('route', 'TEXT'),
+        ('last_location', 'TEXT'),
+        ('daily_collection_kg', 'REAL DEFAULT 0'),
+        ('history', "TEXT DEFAULT ''"),
+    ]:
+        if column_name not in columns:
+            try:
+                cursor.execute(f"ALTER TABLE vehicles ADD COLUMN {column_name} {ddl}")
+            except sqlite3.OperationalError:
+                pass
+
     conn.commit()
     conn.close()
 
@@ -189,11 +226,16 @@ def create_waste_collection_database():
     CREATE TABLE IF NOT EXISTS waste_collection(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         vehicle_id INTEGER,
+        household_id INTEGER,
+        complaint_id INTEGER,
+        citizen_id INTEGER,
         ward TEXT,
         collection_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         waste_quantity REAL,
         waste_type TEXT,
         status TEXT DEFAULT 'Completed',
+        processing_facility TEXT,
+        landfill_site TEXT,
         FOREIGN KEY(vehicle_id) REFERENCES vehicles(id)
     )
     """)
@@ -315,11 +357,46 @@ def create_households_table():
     CREATE TABLE IF NOT EXISTS households(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         house_id TEXT UNIQUE,
+        user_id INTEGER,
         citizen_name TEXT,
         mobile TEXT,
         address TEXT,
         ward TEXT,
         family_members INTEGER DEFAULT 1
+    )
+    """)
+    cursor.execute("PRAGMA table_info(households)")
+    columns = {row[1] for row in cursor.fetchall()}
+    if 'user_id' not in columns:
+        try:
+            cursor.execute('ALTER TABLE households ADD COLUMN user_id INTEGER')
+        except sqlite3.OperationalError:
+            pass
+    conn.commit()
+    conn.close()
+
+
+def create_processing_and_landfill_tables():
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS processing_facilities(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        ward TEXT,
+        capacity_tons REAL DEFAULT 1000,
+        status TEXT DEFAULT 'Active'
+    )
+    """)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS landfill_sites(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        latitude REAL,
+        longitude REAL,
+        capacity_tons REAL,
+        status TEXT DEFAULT 'Active',
+        last_inspection TIMESTAMP
     )
     """)
     conn.commit()
@@ -367,6 +444,7 @@ def initialize_all_databases():
     create_tracking_database()
     create_citizen_dashboard_tables()
     create_households_table()
+    create_processing_and_landfill_tables()
     create_staff_and_driver_tables()
     _INITIALIZED_DB_PATHS.add(db_name)
     print("All databases initialized successfully!")
